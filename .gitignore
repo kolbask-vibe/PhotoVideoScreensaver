@@ -1,0 +1,19 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+installer_output/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.cache
+
+# NuGet (packages restored on build)
+packages/
+nuget.exe
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
