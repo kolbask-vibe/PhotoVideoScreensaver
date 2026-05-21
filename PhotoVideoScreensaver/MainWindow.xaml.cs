@@ -77,14 +77,14 @@ namespace VideoScreensaver {
             imageTimer.Tick += (s, a) => { imageTimer.Stop(); FullScreenImage.Source = null; GC.Collect(0, GCCollectionMode.Optimized); NextMediaItem(); };
             imageTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(PreferenceManager.ReadIntervalSetting(), 1000));
             infoShowingTimer = new DispatcherTimer();
-            infoShowingTimer.Tick += (s, a) => { infoShowingTimer.Stop(); HideError(); };
+            infoShowingTimer.Tick += (s, a) => { infoShowingTimer.Stop(); infoShowingTimer.Interval = TimeSpan.FromSeconds(5); HideError(); };
             infoShowingTimer.Interval = TimeSpan.FromSeconds(5);
             if (preview) ShowError("Control volume with up/down arrows.");
             var timeout = PreferenceManager.ReadVolumeTimeoutSetting();
             if (timeout > 0) {
                 timeoutTimer = new DispatcherTimer();
                 timeoutTimer.Interval = TimeSpan.FromMinutes(timeout);
-                timeoutTimer.Tick += (o, ev) => { _volume = 0; ApplyVolume(); ShowError("Volume muted"); infoShowingTimer.Start(); };
+                timeoutTimer.Tick += (o, ev) => { _volume = 0; ApplyVolume(); ShowError("Volume muted"); infoShowingTimer.Interval = TimeSpan.FromSeconds(5); infoShowingTimer.Start(); };
                 timeoutTimer.Start();
             }
         }
@@ -98,7 +98,22 @@ namespace VideoScreensaver {
                 case Key.P: TogglePause(); break;
                 case Key.Delete: imageTimer.Stop(); if (_mediaPlayer != null && _isPlaying) _mediaPlayer.SetPause(true); PromptDeleteCurrentMedia(); break;
                 case Key.I: Overlay.Visibility = Overlay.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; break;
-                case Key.H: case Key.OemQuestion: ShowError("Keys: Up/Down=Vol, 0=Mute, Left/Right=Prev/Next, P=Pause, Del=Delete, I=Info, R=Rotate, O=Open"); infoShowingTimer.Start(); break;
+                case Key.H: case Key.OemQuestion:
+                    ShowError("Controls:\n" +
+                              "Esc or double-click - Exit screensaver\n" +
+                              "Left arrow, Backspace, or left-click - Previous media\n" +
+                              "Right arrow, Tab, or right-click - Next media\n" +
+                              "Up/Down arrows or mouse wheel - Video volume (0 to mute)\n" +
+                              "F - Show current file in File Explorer\n" +
+                              "P - Pause slideshow\n" +
+                              "Del - Delete current file\n" +
+                              "I - Toggle info overlay\n" +
+                              "R - Rotate image 90 degrees\n" +
+                              "O - Open current file in default application\n" +
+                              "H or ? - Show help");
+                    infoShowingTimer.Interval = TimeSpan.FromSeconds(10);
+                    infoShowingTimer.Start();
+                    break;
                 case Key.R: if (currentItem >= 0 && currentItem < mediaFiles.Count && IsImage(mediaFiles[currentItem])) { imageRotationAngle += 90; imageTimer.Stop(); LoadImage(mediaFiles[currentItem]); } break;
                 case Key.O: if (currentItem >= 0 && currentItem < mediaFiles.Count) { Process.Start(mediaFiles[currentItem]); EndScreensaver(); } break;
                 case Key.F: if (currentItem >= 0 && currentItem < mediaFiles.Count) { Process.Start("explorer.exe", "/select,\"" + mediaFiles[currentItem] + "\""); EndScreensaver(); } break;
@@ -251,6 +266,7 @@ namespace VideoScreensaver {
         private async Task LoadFiles() {
             int tempAlg = algorithm;
             if (algorithm == PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT) algorithm = PreferenceManager.ALGORITHM_RANDOM;
+            ConnectToNas(mediaPaths);
             foreach (string vp in mediaPaths) {
                 if (!Directory.Exists(vp)) { LogError("LoadFiles: directory not found: " + vp); continue; }
                 LogError("LoadFiles: scanning " + vp);
@@ -274,7 +290,6 @@ namespace VideoScreensaver {
         private void OnLoaded(object sender, RoutedEventArgs e) {
             if (!preview) { while (ShowCursor(false) >= 0) { } }
             mediaPaths = PreferenceManager.ReadVideoSettings();
-            ConnectToNas(mediaPaths);
             mediaFiles = new List<string>();
             algorithm = PreferenceManager.ReadAlgorithmSetting();
             if (algorithm == PreferenceManager.ALGORITHM_RANDOM || algorithm == PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT) lastMedia = new List<string>();
@@ -305,9 +320,6 @@ namespace VideoScreensaver {
             if (isLoadingFiles && mediaFiles.Count == 0) {
                 while (isLoadingFiles && mediaFiles.Count == 0) await Task.Delay(200);
             }
-            if (preview) {
-                IndexingOverlay.Visibility = Visibility.Collapsed;
-            }
             if (isLoadingFiles && (currentItem + 1 >= mediaFiles.Count)) {
                 while (isLoadingFiles && currentItem + 1 >= mediaFiles.Count) await Task.Delay(200);
             }
@@ -331,6 +343,9 @@ namespace VideoScreensaver {
 
         private void ShowCurrentItem() {
             if (mediaFiles.Count == 0 || currentItem < 0 || currentItem >= mediaFiles.Count) { ShowError("No media files found."); return; }
+            if (preview) {
+                IndexingOverlay.Visibility = Visibility.Collapsed;
+            }
             string file = mediaFiles[currentItem];
             if (IsImage(file)) LoadImage(file); else LoadMedia(file);
         }
