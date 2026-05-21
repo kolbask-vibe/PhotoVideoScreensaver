@@ -1,10 +1,10 @@
-﻿# PhotoVideoScreensaver
+# PhotoVideoScreensaver
 
 A Windows screensaver that displays photos and videos from local or network folders with hardware-accelerated playback powered by LibVLCSharp.
 
 ## Download
 
-Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_Setup_2.4.0.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
+Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.5.1_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
 
 ## Features
 
@@ -41,7 +41,7 @@ Open Screen Saver Settings and click "Settings..." to configure:
 | Double-click | Exit screensaver |
 | Up / Down arrows | Volume up / down |
 | Mouse wheel / touchpad scroll | Volume up / down |
-| F | Show current file in Explorer |
+| F | Show current file in File Explorer |
 | P | Pause / unpause |
 | I | Toggle info overlay |
 | H | Show help |
@@ -90,6 +90,29 @@ iscc installer.iss
 - Error log: `Documents\PhotoVideoScreensaver_error.log`
 
 ## Changelog
+
+### v2.5.1
+- Displayed a black screen with "Please wait, files are indexing" message in Preview mode until the slideshow starts
+- Settings dialog UI updates:
+  - Renamed "Algorithm" to "Mode"
+  - Renamed "Volume" to "Video volume"
+  - Added "P - Pause slideshow" keyboard shortcut description
+  - Adjusted wording of control descriptions
+- Updated setup file naming format to `PhotoVideoScreensaver_<version>_setup.exe`
+
+### v2.5.0
+- Volume control is now per-application (VLC only) instead of system-wide
+- Background music (Spotify, YouTube, etc.) continues unaffected while screensaver runs
+- System master volume is no longer modified or restored on exit
+
+### v2.4.2
+- Fixed bug causing duplicate photos (loops) in Random mode.
+- Fixed out-of-order toggling bug in Random (No Repeat) mode when background scans complete.
+
+### v2.4.1
+- Updated core LibVLCSharp components to 3.9.7.1
+- Updated native VideoLAN.LibVLC.Windows binaries to 3.0.23.1
+- Preserved Windows 7 compatibility
 
 ### v2.4.0
 - F key: exit screensaver and open Explorer with current file highlighted

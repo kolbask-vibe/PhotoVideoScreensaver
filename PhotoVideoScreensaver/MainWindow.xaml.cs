@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing.Imaging;
@@ -22,6 +22,7 @@ namespace VideoScreensaver {
         private int currentLastMediaItem = -1;
         private bool isLoadingFiles = false;
         private CancellationTokenSource cancellationSource = new CancellationTokenSource();
+        private static readonly Random _random = new Random();
         private List<string> mediaPaths;
         private List<string> mediaFiles;
         private DispatcherTimer imageTimer;
@@ -32,64 +33,6 @@ namespace VideoScreensaver {
         private List<string> lastMedia;
         private int algorithm;
         private int imageRotationAngle;
-        // Core Audio API for system volume control
-        [System.Runtime.InteropServices.ComImport]
-        [System.Runtime.InteropServices.Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
-        private class MMDeviceEnumeratorClass { }
-
-        [System.Runtime.InteropServices.ComImport]
-        [System.Runtime.InteropServices.Guid("A95664D2-9614-4F35-A746-DE8DB63617E6")]
-        [System.Runtime.InteropServices.InterfaceType(System.Runtime.InteropServices.ComInterfaceType.InterfaceIsIUnknown)]
-        private interface IMMDeviceEnumerator {
-            int NotImpl1();
-            int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ppDevice);
-        }
-
-        [System.Runtime.InteropServices.ComImport]
-        [System.Runtime.InteropServices.Guid("D666063F-1587-4E43-81F1-B948E807363F")]
-        [System.Runtime.InteropServices.InterfaceType(System.Runtime.InteropServices.ComInterfaceType.InterfaceIsIUnknown)]
-        private interface IMMDevice {
-            int Activate([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPStruct)] Guid iid, int dwClsCtx, IntPtr pActivationParams, [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.IUnknown)] out object ppInterface);
-        }
-
-        [System.Runtime.InteropServices.ComImport]
-        [System.Runtime.InteropServices.Guid("5CDF2C82-841E-4546-9722-0CF74078229A")]
-        [System.Runtime.InteropServices.InterfaceType(System.Runtime.InteropServices.ComInterfaceType.InterfaceIsIUnknown)]
-        private interface IAudioEndpointVolume {
-            int NotImpl1(); int NotImpl2();
-            int GetChannelCount(out int pnChannelCount);
-            int SetMasterVolumeLevel(float fLevelDB, Guid pguidEventContext);
-            int SetMasterVolumeLevelScalar(float fLevel, Guid pguidEventContext);
-            int GetMasterVolumeLevel(out float pfLevelDB);
-            int GetMasterVolumeLevelScalar(out float pfLevel);
-        }
-
-        private static IAudioEndpointVolume _volumeControl;
-        private static float _savedSystemVolume = -1;
-
-        private static void InitSystemVolume() {
-            try {
-                var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorClass();
-                IMMDevice device;
-                enumerator.GetDefaultAudioEndpoint(0, 1, out device);
-                object obj;
-                device.Activate(typeof(IAudioEndpointVolume).GUID, 1, IntPtr.Zero, out obj);
-                _volumeControl = (IAudioEndpointVolume)obj;
-                float current;
-                _volumeControl.GetMasterVolumeLevelScalar(out current);
-                _savedSystemVolume = current;
-            } catch (Exception ex) { LogError("InitSystemVolume failed: " + ex.Message); }
-        }
-
-        private static void SetSystemVolume(float level) {
-            try { if (_volumeControl != null) _volumeControl.SetMasterVolumeLevelScalar(Math.Max(0, Math.Min(1, level)), Guid.Empty); }
-            catch (Exception ex) { LogError("SetSystemVolume failed: " + ex.Message); }
-        }
-
-        private static void RestoreSystemVolume() {
-            try { if (_volumeControl != null && _savedSystemVolume >= 0) _volumeControl.SetMasterVolumeLevelScalar(_savedSystemVolume, Guid.Empty); }
-            catch { }
-        }
 
         private static LibVLC _libVLC;
         private MediaPlayer _mediaPlayer;
@@ -102,8 +45,7 @@ namespace VideoScreensaver {
         }
 
         private void ApplyVolume() {
-            if (_mediaPlayer != null) _mediaPlayer.Volume = 100;
-            SetSystemVolume((float)_volume);
+            if (_mediaPlayer != null) _mediaPlayer.Volume = VlcVolume;
         }
 
         public MainWindow(bool preview) {
@@ -281,7 +223,7 @@ namespace VideoScreensaver {
         }
 
         private void EndScreensaver() {
-            if (!preview) { if (_mouseHookId != IntPtr.Zero) UnhookWindowsHookEx(_mouseHookId); ShowCursor(true); RestoreSystemVolume(); cancellationSource.Cancel(); StopVlc(); if (Application.Current != null) Application.Current.Shutdown(); }
+            if (!preview) { if (_mouseHookId != IntPtr.Zero) UnhookWindowsHookEx(_mouseHookId); ShowCursor(true); cancellationSource.Cancel(); StopVlc(); if (Application.Current != null) Application.Current.Shutdown(); }
         }
 
         private void StopVlc() {
@@ -316,8 +258,14 @@ namespace VideoScreensaver {
             }
             algorithm = tempAlg;
             if (algorithm == PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT) {
-                mediaFiles = mediaFiles.OrderBy(_ => Guid.NewGuid()).ToList();
-                if (lastMedia != null && lastMedia.Count > 0) { mediaFiles.InsertRange(0, lastMedia); currentItem = lastMedia.Count - 1; }
+                if (lastMedia != null && lastMedia.Count > 0) {
+                    var historySet = new HashSet<string>(lastMedia);
+                    mediaFiles = mediaFiles.Where(f => !historySet.Contains(f)).OrderBy(_ => Guid.NewGuid()).ToList();
+                    mediaFiles.InsertRange(0, lastMedia);
+                    currentItem = currentLastMediaItem >= 0 ? currentLastMediaItem : 0;
+                } else {
+                    mediaFiles = mediaFiles.OrderBy(_ => Guid.NewGuid()).ToList();
+                }
             }
             if (algorithm == PreferenceManager.ALGORITHM_RANDOM) { currentItem = 0; currentLastMediaItem = 0; }
             isLoadingFiles = false;
@@ -325,8 +273,6 @@ namespace VideoScreensaver {
 
         private void OnLoaded(object sender, RoutedEventArgs e) {
             if (!preview) { while (ShowCursor(false) >= 0) { } }
-            InitSystemVolume();
-            SetSystemVolume((float)_defaultVolume);
             mediaPaths = PreferenceManager.ReadVideoSettings();
             ConnectToNas(mediaPaths);
             mediaFiles = new List<string>();
@@ -335,6 +281,10 @@ namespace VideoScreensaver {
             isLoadingFiles = true;
             Task.Factory.StartNew(() => LoadFiles());
             if (mediaPaths.Count == 0) { ShowError("Configure screensaver first."); return; }
+            if (preview) {
+                IndexingOverlay.FontSize = 12;
+                IndexingOverlay.Visibility = Visibility.Visible;
+            }
             NextMediaItem();
         }
         private void PrevMediaItem() {
@@ -355,6 +305,9 @@ namespace VideoScreensaver {
             if (isLoadingFiles && mediaFiles.Count == 0) {
                 while (isLoadingFiles && mediaFiles.Count == 0) await Task.Delay(200);
             }
+            if (preview) {
+                IndexingOverlay.Visibility = Visibility.Collapsed;
+            }
             if (isLoadingFiles && (currentItem + 1 >= mediaFiles.Count)) {
                 while (isLoadingFiles && currentItem + 1 >= mediaFiles.Count) await Task.Delay(200);
             }
@@ -368,7 +321,7 @@ namespace VideoScreensaver {
                     if (isLoadingFiles && currentItem <= 0) await Task.Delay(1000);
                     if (lastMedia != null && currentLastMediaItem < lastMedia.Count - 1) { currentLastMediaItem++; currentItem = mediaFiles.IndexOf(lastMedia[currentLastMediaItem]); }
                     else {
-                        currentItem = new Random().Next(mediaFiles.Count);
+                        currentItem = _random.Next(mediaFiles.Count);
                         if (lastMedia != null) { lastMedia.Add(mediaFiles[currentItem]); if (lastMedia.Count > 100) lastMedia.RemoveAt(0); currentLastMediaItem = lastMedia.Count - 1; }
                     }
                     break;
@@ -445,9 +398,8 @@ namespace VideoScreensaver {
             FullScreenImage.Visibility = Visibility.Collapsed;
             VlcVideoView.Visibility = Visibility.Visible;
             _volume = _defaultVolume;
-            SetSystemVolume((float)_volume);
             var media = new LibVLCSharp.Shared.Media(_libVLC, new Uri(filename));
-            media.AddOption(":start-volume=100");
+            media.AddOption(":start-volume=" + VlcVolume);
             _mediaPlayer.EncounteredError += OnMediaError;
             _mediaPlayer.Play(media);
             _isPlaying = true;

@@ -1,12 +1,12 @@
-﻿[Setup]
+[Setup]
 AppId={{B7E4F2A1-3C5D-4A8B-9F1E-6D2C8A7B5E3F}
 AppName=PhotoVideoScreensaver
-AppVersion=2.4.0
+AppVersion=2.5.1
 AppPublisher=PhotoVideoScreensaver
 DefaultDirName={autopf}\PhotoVideoScreensaver
 DefaultGroupName=PhotoVideoScreensaver
 OutputDir=C:\Temp\pvss
-OutputBaseFilename=setup
+OutputBaseFilename=PhotoVideoScreensaver_2.5.1_setup
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=admin
