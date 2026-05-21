@@ -22,11 +22,5 @@
                 <DropShadowEffect ShadowDepth="0" Color="Black" Opacity="1" BlurRadius="5"/>
             </TextBlock.Effect>
         </TextBlock>
-        <TextBlock Name="IndexingOverlay" Text="Please wait, files are indexing" FontSize="24" Foreground="White"
-                   HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" Panel.ZIndex="300">
-            <TextBlock.Effect>
-                <DropShadowEffect ShadowDepth="0" Color="Black" Opacity="1" BlurRadius="5"/>
-            </TextBlock.Effect>
-        </TextBlock>
     </Grid>
 </Window>

@@ -4,7 +4,7 @@ A Windows screensaver that displays photos and videos from local or network fold
 
 ## Download
 
-Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.5.1_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
+Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.5.3_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
 
 ## Features
 
@@ -90,6 +90,18 @@ iscc installer.iss
 - Error log: `Documents\PhotoVideoScreensaver_error.log`
 
 ## Changelog
+
+### v2.5.3
+- Fixed Settings window layout alignment issues, positioning &quot;Add network path&quot; and &quot;Screensaver controls&quot; sections horizontally in the same grid row
+- Removed the redundant top border divider above the Playback section
+- Expanded input fields (Path, Username, Password) in the network path settings to stretch and automatically occupy the full column width, preventing them from being cut off on the right
+
+### v2.5.2
+- Changed the screensaver settings screen layout from portrait to landscape
+- Expanded the Screensaver controls section in settings to include all 12 controls from the help overlay
+- Added red warning message about potential slow indexing on first preview run
+- Fixed inconsistent help overlay toggle behavior (H/? now behaves like I)
+- Reverted the "Please wait, files are indexing" preview-mode overlay to maintain codebase simplicity
 
 ### v2.5.1
 - Displayed a black screen with "Please wait, files are indexing" message in Preview mode until the slideshow starts

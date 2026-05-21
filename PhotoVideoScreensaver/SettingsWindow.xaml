@@ -2,41 +2,33 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:VideoScreensaver"
-        Title="Screensaver settings" Width="420" WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        Title="Screensaver settings" Width="780" WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
         DataContext="{StaticResource SettingsViewModel}" SizeToContent="Height">
-    <StackPanel Margin="5">
-        <!-- Media folders -->
-        <TextBlock Text="Media folders:" Margin="3" FontWeight="Bold"/>
-        <ListView ItemsSource="{Binding MediaPaths, Mode=OneWay}" SelectedItem="{Binding SelectedRow, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="3" Height="90"/>
-        <StackPanel Orientation="Horizontal" Margin="3">
-            <Button Margin="3" Command="{Binding AddFolderCommand}"><TextBlock Text="Add local folder"/></Button>
-            <Button Margin="3" Command="{Binding RemoveFromListCommand}"><TextBlock Text="Remove selected"/></Button>
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="20" /> <!-- Spacing -->
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Row 0 Left: Media folders -->
+        <StackPanel Grid.Row="0" Grid.Column="0">
+            <TextBlock Text="Media folders:" Margin="3" FontWeight="Bold"/>
+            <ListView ItemsSource="{Binding MediaPaths, Mode=OneWay}" SelectedItem="{Binding SelectedRow, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="3" Height="100"/>
+            <StackPanel Orientation="Horizontal" Margin="3">
+                <Button Margin="3" Command="{Binding AddFolderCommand}"><TextBlock Text="Add local folder"/></Button>
+                <Button Margin="3" Command="{Binding RemoveFromListCommand}"><TextBlock Text="Remove selected"/></Button>
+            </StackPanel>
         </StackPanel>
 
-        <!-- Add network path -->
-        <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Margin="3,8,3,3" Padding="3">
-            <StackPanel>
-                <TextBlock Text="Add network path" FontWeight="Bold" Margin="0,3,0,5"/>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
-                    <TextBlock Text="Path:" Margin="3" Width="70" VerticalAlignment="Center"/>
-                    <TextBox Text="{Binding NetworkPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="3" Width="280"/>
-                </StackPanel>
-                <TextBlock Text="e.g. \\192.168.1.100\photos or \\NAS\shared\pictures" Foreground="Gray" FontSize="11" Margin="76,0,0,5"/>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
-                    <TextBlock Text="Username:" Margin="3" Width="70" VerticalAlignment="Center"/>
-                    <TextBox Text="{Binding NasUsername, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="3" Width="280"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
-                    <TextBlock Text="Password:" Margin="3" Width="70" VerticalAlignment="Center"/>
-                    <PasswordBox x:Name="NasPasswordBox" Width="280" Margin="3"/>
-                </StackPanel>
-                <TextBlock Text="Credentials are optional. Leave blank if the share is accessible without login." Foreground="Gray" FontSize="11" Margin="76,0,0,3" TextWrapping="Wrap"/>
-                <Button Margin="76,3,3,3" HorizontalAlignment="Left" Command="{Binding AddNetworkPathCommand}"><TextBlock Text="Add to media folders"/></Button>
-            </StackPanel>
-        </Border>
-
-        <!-- Playback settings -->
-        <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Margin="3,8,3,3" Padding="3">
+        <!-- Row 0 Right: Playback settings -->
+        <Border Grid.Row="0" Grid.Column="2" BorderBrush="LightGray" BorderThickness="0" Margin="3,0,3,3" Padding="3">
             <StackPanel>
                 <TextBlock Text="Playback" FontWeight="Bold" Margin="0,3,0,5"/>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
@@ -62,21 +54,53 @@
             </StackPanel>
         </Border>
 
-        <!-- Controls info -->
-        <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Margin="3,8,3,3" Padding="3">
+        <!-- Row 1 Left: Add network path -->
+        <Border Grid.Row="1" Grid.Column="0" BorderBrush="LightGray" BorderThickness="0,1,0,0" Margin="3,8,3,3" Padding="3">
             <StackPanel>
-                <TextBlock Text="Screensaver controls" FontWeight="Bold" Margin="0,3,0,5"/>
-                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Esc or double-click - exit screensaver. Mouse movement is ignored."/>
-                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Left arrow, Backspace, or left click - previous"/>
-                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Right arrow, Tab, or right click - next"/>
-                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Up/Down arrows or mouse wheel - volume"/>
-                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="F - show current file in File Explorer"/>
-                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="P - Pause slideshow"/>
+                <TextBlock Text="Add network path" FontWeight="Bold" Margin="0,3,0,5"/>
+                <DockPanel Margin="0,0,0,3">
+                    <TextBlock Text="Path:" Margin="3" Width="70" VerticalAlignment="Center" DockPanel.Dock="Left"/>
+                    <TextBox Text="{Binding NetworkPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="3" HorizontalAlignment="Stretch"/>
+                </DockPanel>
+                <TextBlock Text="e.g. \\192.168.1.100\photos or \\NAS\shared\pictures" Foreground="Gray" FontSize="11" Margin="76,0,0,5"/>
+                <DockPanel Margin="0,0,0,3">
+                    <TextBlock Text="Username:" Margin="3" Width="70" VerticalAlignment="Center" DockPanel.Dock="Left"/>
+                    <TextBox Text="{Binding NasUsername, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="3" HorizontalAlignment="Stretch"/>
+                </DockPanel>
+                <DockPanel Margin="0,0,0,3">
+                    <TextBlock Text="Password:" Margin="3" Width="70" VerticalAlignment="Center" DockPanel.Dock="Left"/>
+                    <PasswordBox x:Name="NasPasswordBox" Margin="3" HorizontalAlignment="Stretch"/>
+                </DockPanel>
+                <TextBlock Text="Credentials are optional. Leave blank if the share is accessible without login." Foreground="Gray" FontSize="11" Margin="76,0,0,3" TextWrapping="Wrap"/>
+                <Button Margin="76,3,3,3" HorizontalAlignment="Left" Command="{Binding AddNetworkPathCommand}"><TextBlock Text="Add to media folders"/></Button>
             </StackPanel>
         </Border>
 
-        <!-- Action buttons -->
-        <Grid Margin="3,8,3,5">
+        <!-- Row 1 Right: Controls info -->
+        <Border Grid.Row="1" Grid.Column="2" BorderBrush="LightGray" BorderThickness="0,1,0,0" Margin="3,8,3,3" Padding="3">
+            <StackPanel>
+                <TextBlock Text="Screensaver controls" FontWeight="Bold" Margin="0,3,0,5"/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Esc or double-click - Exit screensaver. Mouse movement is ignored."/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Left arrow, Backspace, or left-click - Previous media"/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Right arrow, Tab, or right-click - Next media"/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Up/Down arrows or mouse wheel - Adjust volume"/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="0 or Mute key - Mute volume"/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="F - Show current file in File Explorer"/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="P - Pause slideshow"/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Del - Delete current file"/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="I - Toggle info overlay"/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="R - Rotate image 90 degrees"/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="O - Open current file in default application"/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="H or ? - Show help"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Red Warning Message Row -->
+        <TextBlock Grid.Row="2" Grid.ColumnSpan="3" Text="Warning: After installation, the first screensaver preview may take longer to load due to initial file indexing." 
+                   Foreground="Red" TextWrapping="Wrap" Margin="3,10,3,10" FontWeight="SemiBold"/>
+
+        <!-- Action buttons Row -->
+        <Grid Grid.Row="3" Grid.ColumnSpan="3" Margin="3,0,3,5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition/><ColumnDefinition/><ColumnDefinition/>
             </Grid.ColumnDefinitions>
@@ -84,5 +108,5 @@
             <Button Command="{Binding CancelCommand}" Margin="3" Grid.Column="1"><TextBlock Text="Discard and exit"/></Button>
             <Button Command="{Binding RemoveSettingsCommand}" Margin="3" Grid.Column="2"><TextBlock Text="Reset all"/></Button>
         </Grid>
-    </StackPanel>
+    </Grid>
 </Window>

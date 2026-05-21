@@ -99,20 +99,24 @@ namespace VideoScreensaver {
                 case Key.Delete: imageTimer.Stop(); if (_mediaPlayer != null && _isPlaying) _mediaPlayer.SetPause(true); PromptDeleteCurrentMedia(); break;
                 case Key.I: Overlay.Visibility = Overlay.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; break;
                 case Key.H: case Key.OemQuestion:
-                    ShowError("Controls:\n" +
-                              "Esc or double-click - Exit screensaver\n" +
-                              "Left arrow, Backspace, or left-click - Previous media\n" +
-                              "Right arrow, Tab, or right-click - Next media\n" +
-                              "Up/Down arrows or mouse wheel - Video volume (0 to mute)\n" +
-                              "F - Show current file in File Explorer\n" +
-                              "P - Pause slideshow\n" +
-                              "Del - Delete current file\n" +
-                              "I - Toggle info overlay\n" +
-                              "R - Rotate image 90 degrees\n" +
-                              "O - Open current file in default application\n" +
-                              "H or ? - Show help");
-                    infoShowingTimer.Interval = TimeSpan.FromSeconds(10);
-                    infoShowingTimer.Start();
+                    if (ErrorText.Visibility == Visibility.Visible && ErrorText.Text.StartsWith("Controls:")) {
+                        HideError();
+                    } else {
+                        ShowError("Controls:\n" +
+                                  "Esc or double-click - Exit screensaver. Mouse movement is ignored.\n" +
+                                  "Left arrow, Backspace, or left-click - Previous media\n" +
+                                  "Right arrow, Tab, or right-click - Next media\n" +
+                                  "Up/Down arrows or mouse wheel - Adjust volume\n" +
+                                  "0 or Mute key - Mute volume\n" +
+                                  "F - Show current file in File Explorer\n" +
+                                  "P - Pause slideshow\n" +
+                                  "Del - Delete current file\n" +
+                                  "I - Toggle info overlay\n" +
+                                  "R - Rotate image 90 degrees\n" +
+                                  "O - Open current file in default application\n" +
+                                  "H or ? - Show help");
+                        infoShowingTimer.Stop();
+                    }
                     break;
                 case Key.R: if (currentItem >= 0 && currentItem < mediaFiles.Count && IsImage(mediaFiles[currentItem])) { imageRotationAngle += 90; imageTimer.Stop(); LoadImage(mediaFiles[currentItem]); } break;
                 case Key.O: if (currentItem >= 0 && currentItem < mediaFiles.Count) { Process.Start(mediaFiles[currentItem]); EndScreensaver(); } break;
@@ -296,10 +300,6 @@ namespace VideoScreensaver {
             isLoadingFiles = true;
             Task.Factory.StartNew(() => LoadFiles());
             if (mediaPaths.Count == 0) { ShowError("Configure screensaver first."); return; }
-            if (preview) {
-                IndexingOverlay.FontSize = 12;
-                IndexingOverlay.Visibility = Visibility.Visible;
-            }
             NextMediaItem();
         }
         private void PrevMediaItem() {
@@ -343,9 +343,6 @@ namespace VideoScreensaver {
 
         private void ShowCurrentItem() {
             if (mediaFiles.Count == 0 || currentItem < 0 || currentItem >= mediaFiles.Count) { ShowError("No media files found."); return; }
-            if (preview) {
-                IndexingOverlay.Visibility = Visibility.Collapsed;
-            }
             string file = mediaFiles[currentItem];
             if (IsImage(file)) LoadImage(file); else LoadMedia(file);
         }
