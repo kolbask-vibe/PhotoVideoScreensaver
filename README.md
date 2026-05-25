@@ -59,7 +59,7 @@ The screensaver works with cloud photo libraries via their desktop sync clients:
 
 ## Requirements
 
-- Windows 8.1, Windows 10, or Windows 11
+- Windows 7, 8, 10, or 11
 - .NET Framework 4.7.2+ (preinstalled on Win 10 1803+; available via Windows Update on 8.1)
 
 ## Building from Source
