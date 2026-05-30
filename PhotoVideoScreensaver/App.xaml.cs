@@ -31,6 +31,15 @@ namespace VideoScreensaver {
                 string arg = e.Args[0].Length >= 2 ? e.Args[0].Substring(0, 2).ToLower() : "";
                 if (arg == "/c") { new SettingsWindow().ShowDialog(); Shutdown(0); return; }
                 if (arg == "/p" && e.Args.Length > 1) { ShowInParent(new IntPtr(Convert.ToInt32(e.Args[1]))); return; }
+                if (arg == "/u" || e.Args[0].ToLower() == "/uninstall") {
+                    PreferenceManager.RemoveRegistryKeys();
+                    try {
+                        string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PhotoVideoScreensaver_error.log");
+                        if (File.Exists(logPath)) File.Delete(logPath);
+                    } catch { }
+                    Shutdown(0);
+                    return;
+                }
             }
             // Black out secondary screens
             foreach (var screen in Screen.AllScreens) {
@@ -59,8 +68,12 @@ namespace VideoScreensaver {
             w.WindowStyle = WindowStyle.None; w.ResizeMode = ResizeMode.NoResize; w.ShowInTaskbar = false;
             w.Left = scr.Bounds.Left; w.Top = scr.Bounds.Top;
             w.Width = scr.Bounds.Width; w.Height = scr.Bounds.Height;
-            w.Topmost = true; w.ForceCursor = true; w.WindowState = WindowState.Maximized;
+            w.Topmost = true; w.ForceCursor = true; w.WindowState = WindowState.Normal;
             w.Show();
+            try {
+                var helper = new WindowInteropHelper(w);
+                SetForegroundWindow(helper.Handle);
+            } catch { }
         }
 
         private async void ShowInParent(IntPtr parentHwnd) {

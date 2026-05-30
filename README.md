@@ -4,7 +4,7 @@ A Windows screensaver that displays photos and videos from local or network fold
 
 ## Download
 
-Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.5.5_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
+Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.5.6_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
 
 ## Features
 
@@ -90,6 +90,11 @@ iscc installer.iss
 - Error log: `Documents\PhotoVideoScreensaver_error.log`
 
 ## Changelog
+
+### v2.5.6
+- Completely eliminated Windows Explorer window flashes on startup by setting WindowState to Normal and using native SetForegroundWindow activation.
+- Wiped all screensaver registry settings across all user profiles on uninstallation by iterating over loaded hives in HKEY_USERS, ensuring settings do not survive upgrades or uninstallation under Administrator context.
+- Added uninstaller cleanup for the error log file.
 
 ### v2.5.5
 - Fixed screensaver startup causing Windows Explorer to flash or appear briefly on screen. The VLC video surface is no longer pre-initialized at window creation time, eliminating native window conflicts during startup.

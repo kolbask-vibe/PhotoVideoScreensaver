@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -24,13 +24,46 @@ namespace VideoScreensaver {
 
         public static void RemoveRegistryKeys()
         {
-            RegistryKey software = Registry.CurrentUser.CreateSubKey("Software");
-            var key = software.OpenSubKey(BASE_KEY);
-            if (key != null)
+            // Delete from Current User (HKCU)
+            try
             {
-                key.Close();
-                software.DeleteSubKeyTree(BASE_KEY);
+                using (RegistryKey software = Registry.CurrentUser.OpenSubKey("Software", true))
+                {
+                    if (software != null)
+                    {
+                        software.DeleteSubKeyTree(BASE_KEY, false);
+                    }
+                }
             }
+            catch { }
+
+            // Delete from all loaded user profiles in HKEY_USERS (HKU)
+            try
+            {
+                string[] userNames = Registry.Users.GetSubKeyNames();
+                foreach (string userName in userNames)
+                {
+                    if (userName.EndsWith("_Classes", StringComparison.OrdinalIgnoreCase)) continue;
+                    try
+                    {
+                        using (RegistryKey userKey = Registry.Users.OpenSubKey(userName, true))
+                        {
+                            if (userKey != null)
+                            {
+                                using (RegistryKey software = userKey.OpenSubKey("Software", true))
+                                {
+                                    if (software != null)
+                                    {
+                                        software.DeleteSubKeyTree(BASE_KEY, false);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
         }
 
         public static List<String> ReadVideoSettings() {
