@@ -63,7 +63,6 @@ namespace VideoScreensaver {
                     _libVLC = new LibVLC("--no-osd", "--no-video-title-show", "--no-volume-save");
                 }
                 _mediaPlayer = new MediaPlayer(_libVLC);
-                VlcVideoView.MediaPlayer = _mediaPlayer;
                 _defaultVolume = PreferenceManager.ReadVolumeSetting();
                 _volume = _defaultVolume;
                 ApplyVolume();
@@ -300,8 +299,6 @@ namespace VideoScreensaver {
             algorithm = PreferenceManager.ReadAlgorithmSetting();
             if (algorithm == PreferenceManager.ALGORITHM_RANDOM || algorithm == PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT) lastMedia = new List<string>();
             isLoadingFiles = true;
-            Focus();
-            Keyboard.Focus(this);
             Task.Factory.StartNew(() => LoadFiles());
             if (mediaPaths.Count == 0) { ShowError("Configure screensaver first."); return; }
             NextMediaItem();
@@ -356,7 +353,7 @@ namespace VideoScreensaver {
                 ThreadPool.QueueUserWorkItem(_ => { try { _mediaPlayer.Stop(); } catch { } });
             }
             FullScreenImage.Visibility = Visibility.Visible;
-            VlcVideoView.Visibility = Visibility.Hidden;
+            VlcVideoView.Visibility = Visibility.Collapsed;
             FullScreenImage.RenderTransform = null;
             Overlay.Text = "";
             string ext = Path.GetExtension(filename).ToLower();
@@ -413,6 +410,7 @@ namespace VideoScreensaver {
         private void LoadMedia(string filename) {
             FullScreenImage.Source = null;
             FullScreenImage.Visibility = Visibility.Collapsed;
+            if (VlcVideoView.MediaPlayer == null) VlcVideoView.MediaPlayer = _mediaPlayer;
             VlcVideoView.Visibility = Visibility.Visible;
             _volume = _defaultVolume;
             var media = new LibVLCSharp.Shared.Media(_libVLC, new Uri(filename));

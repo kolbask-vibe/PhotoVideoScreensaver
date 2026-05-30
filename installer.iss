@@ -1,12 +1,12 @@
 [Setup]
 AppId={{B7E4F2A1-3C5D-4A8B-9F1E-6D2C8A7B5E3F}
 AppName=PhotoVideoScreensaver
-AppVersion=2.5.4
+AppVersion=2.5.5
 AppPublisher=PhotoVideoScreensaver
 DefaultDirName={autopf}\PhotoVideoScreensaver
 DefaultGroupName=PhotoVideoScreensaver
 OutputDir=C:\Temp\pvss
-OutputBaseFilename=PhotoVideoScreensaver_2.5.4_setup
+OutputBaseFilename=PhotoVideoScreensaver_2.5.5_setup
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=admin
@@ -41,6 +41,7 @@ Filename: "{app}\PhotoVideoScreensaver.exe"; Parameters: "/c"; Description: "Con
 
 [UninstallRun]
 Filename: "reg.exe"; Parameters: "delete ""HKCU\Control Panel\Desktop"" /v SCRNSAVE.EXE /f"; Flags: runhidden; RunOnceId: "ClearScreensaver"
+Filename: "reg.exe"; Parameters: "delete ""HKU\.DEFAULT\Control Panel\Desktop"" /v SCRNSAVE.EXE /f"; Flags: runhidden; RunOnceId: "ClearScreensaverDefault"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

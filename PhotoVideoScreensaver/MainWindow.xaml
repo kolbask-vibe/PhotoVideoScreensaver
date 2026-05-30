@@ -7,7 +7,7 @@
         KeyDown="ScrKeyDown" Loaded="OnLoaded">
     <Grid>
         <Image Name="FullScreenImage" Stretch="Uniform" />
-        <vlc:VideoView x:Name="VlcVideoView" Visibility="Hidden" Background="Black" />
+        <vlc:VideoView x:Name="VlcVideoView" Visibility="Collapsed" Background="Black" />
         <Border Name="InputOverlay" Background="Transparent" Panel.ZIndex="100"
                 />
         <TextBlock Name="ErrorText" FontSize="24" TextWrapping="Wrap" Foreground="White"
