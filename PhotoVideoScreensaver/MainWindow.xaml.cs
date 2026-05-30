@@ -300,7 +300,6 @@ namespace VideoScreensaver {
             algorithm = PreferenceManager.ReadAlgorithmSetting();
             if (algorithm == PreferenceManager.ALGORITHM_RANDOM || algorithm == PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT) lastMedia = new List<string>();
             isLoadingFiles = true;
-            Activate();
             Focus();
             Keyboard.Focus(this);
             Task.Factory.StartNew(() => LoadFiles());

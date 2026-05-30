@@ -59,7 +59,7 @@ namespace VideoScreensaver {
             w.WindowStyle = WindowStyle.None; w.ResizeMode = ResizeMode.NoResize; w.ShowInTaskbar = false;
             w.Left = scr.Bounds.Left; w.Top = scr.Bounds.Top;
             w.Width = scr.Bounds.Width; w.Height = scr.Bounds.Height;
-            w.Topmost = true; w.ForceCursor = true; w.WindowState = WindowState.Normal;
+            w.Topmost = true; w.ForceCursor = true; w.WindowState = WindowState.Maximized;
             w.Show();
         }
 
