@@ -4,7 +4,8 @@
         xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
         Height="350" Width="525" Cursor="None" Title="PhotoVideoScreensaver"
         WindowStyle="None" Background="Black"
-        KeyDown="ScrKeyDown" Loaded="OnLoaded">
+        KeyDown="ScrKeyDown" Loaded="OnLoaded"
+        Focusable="True" FocusManager.FocusedElement="{Binding RelativeSource={RelativeSource Self}}">
     <Grid>
         <Image Name="FullScreenImage" Stretch="Uniform" />
         <vlc:VideoView x:Name="VlcVideoView" Visibility="Collapsed" Background="Black" />

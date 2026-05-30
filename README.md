@@ -4,7 +4,7 @@ A Windows screensaver that displays photos and videos from local or network fold
 
 ## Download
 
-Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.5.6_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
+Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.5.7_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
 
 ## Features
 
@@ -90,6 +90,10 @@ iscc installer.iss
 - Error log: `Documents\PhotoVideoScreensaver_error.log`
 
 ## Changelog
+
+### v2.5.7
+- Resolved non-responsiveness of Esc key during the initial blackout load window by forcing logical keyboard focus onto the screensaver MainWindow in XAML and OnLoaded.
+- Rewrote the uninstaller registry settings and log file cleanup to run natively inside the Inno Setup uninstaller script (Pascal code), ensuring 100% reliable settings deletion across all user profiles.
 
 ### v2.5.6
 - Completely eliminated Windows Explorer window flashes on startup by setting WindowState to Normal and using native SetForegroundWindow activation.
