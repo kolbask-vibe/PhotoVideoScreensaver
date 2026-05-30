@@ -63,6 +63,7 @@ namespace VideoScreensaver {
                     _libVLC = new LibVLC("--no-osd", "--no-video-title-show", "--no-volume-save");
                 }
                 _mediaPlayer = new MediaPlayer(_libVLC);
+                VlcVideoView.MediaPlayer = _mediaPlayer;
                 _defaultVolume = PreferenceManager.ReadVolumeSetting();
                 _volume = _defaultVolume;
                 ApplyVolume();
@@ -356,7 +357,7 @@ namespace VideoScreensaver {
                 ThreadPool.QueueUserWorkItem(_ => { try { _mediaPlayer.Stop(); } catch { } });
             }
             FullScreenImage.Visibility = Visibility.Visible;
-            VlcVideoView.Visibility = Visibility.Collapsed;
+            VlcVideoView.Visibility = Visibility.Hidden;
             FullScreenImage.RenderTransform = null;
             Overlay.Text = "";
             string ext = Path.GetExtension(filename).ToLower();
@@ -413,7 +414,6 @@ namespace VideoScreensaver {
         private void LoadMedia(string filename) {
             FullScreenImage.Source = null;
             FullScreenImage.Visibility = Visibility.Collapsed;
-            if (VlcVideoView.MediaPlayer == null) VlcVideoView.MediaPlayer = _mediaPlayer;
             VlcVideoView.Visibility = Visibility.Visible;
             _volume = _defaultVolume;
             var media = new LibVLCSharp.Shared.Media(_libVLC, new Uri(filename));
