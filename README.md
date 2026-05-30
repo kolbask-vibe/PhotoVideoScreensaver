@@ -4,7 +4,7 @@ A Windows screensaver that displays photos and videos from local or network fold
 
 ## Download
 
-Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.5.3_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
+Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.5.4_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
 
 ## Features
 
@@ -90,6 +90,11 @@ iscc installer.iss
 - Error log: `Documents\PhotoVideoScreensaver_error.log`
 
 ## Changelog
+
+### v2.5.4
+- Fixed volume ignoring settings: videos could start with sound even when volume was set to zero, because VLC's asynchronous playback reset the volume before the application could apply it. Volume is now re-applied via a one-shot Playing event once VLC's audio pipeline is ready.
+- Fixed slow startup on multi-monitor setups: the screensaver now immediately displays a black screen with a "Loading media files..." message while scanning folders, instead of leaving the active window visible for up to 30 seconds.
+- The screensaver window now activates and takes keyboard focus immediately on launch, so Escape works straight away even before the first media file loads.
 
 ### v2.5.3
 - Fixed Settings window layout alignment issues, positioning &quot;Add network path&quot; and &quot;Screensaver controls&quot; sections horizontally in the same grid row

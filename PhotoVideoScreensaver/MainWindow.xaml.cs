@@ -39,6 +39,7 @@ namespace VideoScreensaver {
         private bool _isPlaying;
         private double _volume;
         private double _defaultVolume;
+        private EventHandler<EventArgs> _volumePlayingHandler;
 
         private int VlcVolume {
             get { return (int)(_volume * 100); }
@@ -62,7 +63,6 @@ namespace VideoScreensaver {
                     _libVLC = new LibVLC("--no-osd", "--no-video-title-show", "--no-volume-save");
                 }
                 _mediaPlayer = new MediaPlayer(_libVLC);
-                VlcVideoView.MediaPlayer = _mediaPlayer;
                 _defaultVolume = PreferenceManager.ReadVolumeSetting();
                 _volume = _defaultVolume;
                 ApplyVolume();
@@ -249,6 +249,7 @@ namespace VideoScreensaver {
             try {
                 if (_mediaPlayer != null) {
                     _mediaPlayer.EncounteredError -= OnMediaError;
+                    if (_volumePlayingHandler != null) { _mediaPlayer.Playing -= _volumePlayingHandler; _volumePlayingHandler = null; }
                     if (_mediaPlayer.IsPlaying) ThreadPool.QueueUserWorkItem(_ => { try { _mediaPlayer.Stop(); } catch { } });
                 }
             } catch { }
@@ -298,6 +299,9 @@ namespace VideoScreensaver {
             algorithm = PreferenceManager.ReadAlgorithmSetting();
             if (algorithm == PreferenceManager.ALGORITHM_RANDOM || algorithm == PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT) lastMedia = new List<string>();
             isLoadingFiles = true;
+            Activate();
+            Focus();
+            Keyboard.Focus(this);
             Task.Factory.StartNew(() => LoadFiles());
             if (mediaPaths.Count == 0) { ShowError("Configure screensaver first."); return; }
             NextMediaItem();
@@ -342,6 +346,7 @@ namespace VideoScreensaver {
         }
 
         private void ShowCurrentItem() {
+            HideError();
             if (mediaFiles.Count == 0 || currentItem < 0 || currentItem >= mediaFiles.Count) { ShowError("No media files found."); return; }
             string file = mediaFiles[currentItem];
             if (IsImage(file)) LoadImage(file); else LoadMedia(file);
@@ -408,11 +413,20 @@ namespace VideoScreensaver {
         private void LoadMedia(string filename) {
             FullScreenImage.Source = null;
             FullScreenImage.Visibility = Visibility.Collapsed;
+            if (VlcVideoView.MediaPlayer == null) VlcVideoView.MediaPlayer = _mediaPlayer;
             VlcVideoView.Visibility = Visibility.Visible;
             _volume = _defaultVolume;
             var media = new LibVLCSharp.Shared.Media(_libVLC, new Uri(filename));
             media.AddOption(":start-volume=" + VlcVolume);
             _mediaPlayer.EncounteredError += OnMediaError;
+            // Re-apply volume once VLC's audio pipeline is actually running
+            if (_volumePlayingHandler != null) _mediaPlayer.Playing -= _volumePlayingHandler;
+            _volumePlayingHandler = (s, a) => {
+                _mediaPlayer.Playing -= _volumePlayingHandler;
+                _volumePlayingHandler = null;
+                Dispatcher.BeginInvoke(new Action(() => ApplyVolume()));
+            };
+            _mediaPlayer.Playing += _volumePlayingHandler;
             _mediaPlayer.Play(media);
             _isPlaying = true;
             ApplyVolume();
