@@ -4,7 +4,7 @@ A Windows screensaver that displays photos and videos from local or network fold
 
 ## Download
 
-Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.5.7_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
+Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.5.8_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
 
 ## Features
 
@@ -90,6 +90,9 @@ iscc installer.iss
 - Error log: `Documents\PhotoVideoScreensaver_error.log`
 
 ## Changelog
+
+### v2.5.8
+- Offloaded native VLC library loading (`Core.Initialize`) to a background task at startup. This prevents the UI thread from freezing during antivirus scans on first launch, ensuring the blackout load screen remains fully responsive to key presses (including `Esc` to exit immediately).
 
 ### v2.5.7
 - Resolved non-responsiveness of Esc key during the initial blackout load window by forcing logical keyboard focus onto the screensaver MainWindow in XAML and OnLoaded.

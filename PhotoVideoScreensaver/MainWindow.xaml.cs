@@ -41,6 +41,29 @@ namespace VideoScreensaver {
         private double _defaultVolume;
         private EventHandler<EventArgs> _volumePlayingHandler;
 
+        private static Task _vlcInitTask;
+
+        private static void InitializeVlcStatic() {
+            if (_libVLC == null) {
+                string exeDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+                string arch = Environment.Is64BitProcess ? "win-x64" : "win-x86";
+                string libvlcPath = Path.Combine(exeDir, "libvlc", arch);
+                if (!Directory.Exists(libvlcPath))
+                    libvlcPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PhotoVideoScreensaver", "libvlc", arch);
+                Core.Initialize(libvlcPath);
+                _libVLC = new LibVLC("--no-osd", "--no-video-title-show", "--no-volume-save");
+            }
+        }
+
+        private async Task EnsureVlcInitialized() {
+            await _vlcInitTask;
+            if (_mediaPlayer == null) {
+                _mediaPlayer = new MediaPlayer(_libVLC);
+                _mediaPlayer.EndReached += (s, a) => Dispatcher.BeginInvoke(new Action(() => { StopVlc(); NextMediaItem(); }));
+                ApplyVolume();
+            }
+        }
+
         private int VlcVolume {
             get { return (int)(_volume * 100); }
         }
@@ -52,24 +75,12 @@ namespace VideoScreensaver {
         public MainWindow(bool preview) {
             InitializeComponent();
             this.preview = preview;
-            try {
-                if (_libVLC == null) {
-                    string exeDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-                    string arch = Environment.Is64BitProcess ? "win-x64" : "win-x86";
-                    string libvlcPath = Path.Combine(exeDir, "libvlc", arch);
-                    if (!Directory.Exists(libvlcPath))
-                        libvlcPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PhotoVideoScreensaver", "libvlc", arch);
-                    Core.Initialize(libvlcPath);
-                    _libVLC = new LibVLC("--no-osd", "--no-video-title-show", "--no-volume-save");
-                }
-                _mediaPlayer = new MediaPlayer(_libVLC);
-                _defaultVolume = PreferenceManager.ReadVolumeSetting();
-                _volume = _defaultVolume;
-                ApplyVolume();
-                _mediaPlayer.EndReached += (s, a) => Dispatcher.BeginInvoke(new Action(() => { StopVlc(); NextMediaItem(); }));
-            } catch (Exception ex) {
-                LogError("VLC init failed: " + ex);
+            if (_vlcInitTask == null) {
+                _vlcInitTask = Task.Run(() => InitializeVlcStatic());
             }
+            _defaultVolume = PreferenceManager.ReadVolumeSetting();
+            _volume = _defaultVolume;
+            ApplyVolume();
             // Install global low-level mouse hook for wheel events over VLC native window
             InstallMouseHook();
             InitClickTimer();
@@ -409,9 +420,16 @@ namespace VideoScreensaver {
             }
         }
 
-        private void LoadMedia(string filename) {
+        private async void LoadMedia(string filename) {
             FullScreenImage.Source = null;
             FullScreenImage.Visibility = Visibility.Collapsed;
+            try {
+                await EnsureVlcInitialized();
+            } catch (Exception ex) {
+                LogError("VLC deferred init failed: " + ex);
+                ShowError("VLC initialization failed.");
+                return;
+            }
             if (VlcVideoView.MediaPlayer == null) VlcVideoView.MediaPlayer = _mediaPlayer;
             VlcVideoView.Visibility = Visibility.Visible;
             _volume = _defaultVolume;
