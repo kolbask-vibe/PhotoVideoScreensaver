@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -59,7 +59,7 @@ namespace VideoScreensaver
             _saveCommand = new CommandHandler(o =>
             {
                 PreferenceManager.WriteVideoSettings(_mediaPaths.ToList());
-                PreferenceManager.WriteVolumeSetting((float)Volume / 100F);
+                PreferenceManager.WriteVolumeSetting(Volume / 100.0);
                 PreferenceManager.WriteAlgorithmSetting(NextMediaAlgorithm);
                 PreferenceManager.WriteIntervalSetting(Interval * 1000);
                 PreferenceManager.WriteVolumeTimeoutSetting(VolumeTimeout);
@@ -80,6 +80,8 @@ namespace VideoScreensaver
             _addNetworkPathCommand = new CommandHandler(o => {
                 string path = (NetworkPath ?? "").Trim();
                 if (path.Length > 0 && !_mediaPaths.Contains(path)) {
+                    try { path = System.IO.Path.GetFullPath(path); }
+                    catch { /* leave as-is for UNC paths that may not resolve locally */ }
                     _mediaPaths.Add(path);
                     NetworkPath = "";
                 }
@@ -176,7 +178,7 @@ namespace VideoScreensaver
             }
             set
             {
-                _volume = value / 100F;
+                _volume = value / 100.0;
                 OnPropertyChanged("Volume");
             }
         }

@@ -80,17 +80,15 @@
         <Border Grid.Row="1" Grid.Column="2" BorderBrush="LightGray" BorderThickness="0,1,0,0" Margin="3,8,3,3" Padding="3">
             <StackPanel>
                 <TextBlock Text="Screensaver controls" FontWeight="Bold" Margin="0,3,0,5"/>
-                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Esc or double-click - Exit screensaver. Mouse movement is ignored."/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Esc, standard keys, or double-click - Exit screensaver."/>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Left arrow, Backspace, or left-click - Previous media"/>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Right arrow, Tab, or right-click - Next media"/>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Up/Down arrows or mouse wheel - Adjust volume"/>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="0 or Mute key - Mute volume"/>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="F - Show current file in File Explorer"/>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="P - Pause slideshow"/>
-                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="Del - Delete current file"/>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="I - Toggle info overlay"/>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="R - Rotate image 90 degrees"/>
-                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="O - Open current file in default application"/>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Text="H or ? - Show help"/>
             </StackPanel>
         </Border>

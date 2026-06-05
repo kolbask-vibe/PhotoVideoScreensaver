@@ -4,7 +4,7 @@ A Windows screensaver that displays photos and videos from local or network fold
 
 ## Download
 
-Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.5.8_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
+Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.6.2_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
 
 ## Features
 
@@ -35,7 +35,7 @@ Open Screen Saver Settings and click "Settings..." to configure:
 
 | Input | Action |
 |-------|--------|
-| Esc | Exit screensaver |
+| Esc / Standard keys | Exit screensaver |
 | Right arrow / Tab / right click | Next |
 | Left arrow / Backspace / left click | Previous |
 | Double-click | Exit screensaver |
@@ -46,10 +46,8 @@ Open Screen Saver Settings and click "Settings..." to configure:
 | I | Toggle info overlay |
 | H | Show help |
 | R | Rotate image |
-| O | Open file in default app |
-| Delete | Delete current file (with confirmation) |
 
-Mouse movement is ignored.
+Significant mouse movement or swiping exits the screensaver. Volume and playback mouse controls are active only when interacting directly.
 
 ## Cloud Photos
 
@@ -90,6 +88,31 @@ iscc installer.iss
 - Error log: `Documents\PhotoVideoScreensaver_error.log`
 
 ## Changelog
+
+### v2.6.2
+- **Security & Vulnerability Fixes**:
+  - Removed dangerous DPAPI `LocalMachine` fallback that allowed any local user account to decrypt stored NAS passwords.
+  - Redacted NAS username from `%TEMP%` error logs.
+  - Added path canonicalization (`Path.GetFullPath()`) to prevent network path traversal via `..` segments.
+- **Stability & Performance**:
+  - Fixed a thread pool starvation bug in the preview window mode.
+  - Resolved native memory and thread handle leaks in VLC media loading.
+  - Fixed memory leak of decoded frame data in EXIF image reader.
+  - Transitioned background media loading to proper async/await `Task.Run` scheduling.
+  - Implemented consecutive-error circuit breaker to safely skip completely broken media directories without infinite loops.
+  - Ensured thread-safe locking during LibVLC core initialization.
+  - Improved image sharpness on High-DPI screens by decoding to physical screen width.
+  - Fixed potential crash on 64-bit platforms when launching the preview window by parsing system-provided window handles as 64-bit integers.
+- **Bug Fixes & Refinements**:
+  - Fixed a multi-monitor layout and coordinate alignment mismatch on High-DPI displays by using a dynamic WPF scaling matrix.
+  - Fixed thread-safety race conditions on the scanned media list using thread lock synchronization.
+  - Resolved lock screen / logon screen settings lookup: the screensaver now scans loaded HKEY_USERS hives when running under the SYSTEM context to display local media on resume/lock.
+  - Deactivated the global mouse hook in preview mode to prevent system-wide input interception.
+  - Implemented standard and interactive mouse swipe-to-exit with a 200px threshold.
+  - Fully removed the obsolete O and Delete hotkeys. Retained and thread-locked the F key functionality.
+  - Restrained image rotation options exclusively to JPEGs and JPGs.
+  - Restricted uninstall registry cleanups to the current user hive to prevent invasive antiviruses from flagging uninstallation.
+  - Made the `$RECYCLE.BIN` filter case-insensitive to ensure reliable skipping of recycle bin items.
 
 ### v2.5.8
 - Offloaded native VLC library loading (`Core.Initialize`) to a background task at startup. This prevents the UI thread from freezing during antivirus scans on first launch, ensuring the blackout load screen remains fully responsive to key presses (including `Esc` to exit immediately).

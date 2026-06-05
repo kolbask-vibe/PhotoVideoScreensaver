@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -25,6 +26,7 @@ namespace VideoScreensaver {
         private static readonly Random _random = new Random();
         private List<string> mediaPaths;
         private List<string> mediaFiles;
+        private readonly object _mediaFilesLock = new object();
         private DispatcherTimer imageTimer;
         private DispatcherTimer timeoutTimer;
         private DispatcherTimer infoShowingTimer;
@@ -33,6 +35,8 @@ namespace VideoScreensaver {
         private List<string> lastMedia;
         private int algorithm;
         private int imageRotationAngle;
+        private int _consecutiveErrors = 0;
+        private const int MAX_CONSECUTIVE_ERRORS = 50;
 
         private static LibVLC _libVLC;
         private MediaPlayer _mediaPlayer;
@@ -40,14 +44,26 @@ namespace VideoScreensaver {
         private double _volume;
         private double _defaultVolume;
         private EventHandler<EventArgs> _volumePlayingHandler;
+        private EventHandler<EventArgs> _playingHandler;
 
         private static Task _vlcInitTask;
 
+        private static readonly object _vlcInitLock = new object();
+
         private static void InitializeVlcStatic() {
-            if (_libVLC == null) {
+            lock (_vlcInitLock) {
+                if (_libVLC != null) return;
                 string exeDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
                 string arch = Environment.Is64BitProcess ? "win-x64" : "win-x86";
                 string libvlcPath = Path.Combine(exeDir, "libvlc", arch);
+                if (!Directory.Exists(libvlcPath)) {
+                    // When .scr runs from System32, find VLC libraries via the install directory
+                    string installDir = App.GetInstallDir();
+                    if (installDir != null) {
+                        string regPath = Path.Combine(installDir, "libvlc", arch);
+                        if (Directory.Exists(regPath)) libvlcPath = regPath;
+                    }
+                }
                 if (!Directory.Exists(libvlcPath))
                     libvlcPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PhotoVideoScreensaver", "libvlc", arch);
                 Core.Initialize(libvlcPath);
@@ -82,10 +98,12 @@ namespace VideoScreensaver {
             _volume = _defaultVolume;
             ApplyVolume();
             // Install global low-level mouse hook for wheel events over VLC native window
-            InstallMouseHook();
+            if (!preview) {
+                InstallMouseHook();
+            }
             InitClickTimer();
             imageTimer = new DispatcherTimer();
-            imageTimer.Tick += (s, a) => { imageTimer.Stop(); FullScreenImage.Source = null; GC.Collect(0, GCCollectionMode.Optimized); NextMediaItem(); };
+            imageTimer.Tick += (s, a) => { imageTimer.Stop(); FullScreenImage.Source = null; NextMediaItem(); };
             imageTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(PreferenceManager.ReadIntervalSetting(), 1000));
             infoShowingTimer = new DispatcherTimer();
             infoShowingTimer.Tick += (s, a) => { infoShowingTimer.Stop(); infoShowingTimer.Interval = TimeSpan.FromSeconds(5); HideError(); };
@@ -107,33 +125,56 @@ namespace VideoScreensaver {
                 case Key.Right: case Key.Tab: imageTimer.Stop(); NextMediaItem(); break;
                 case Key.Left: case Key.Back: imageTimer.Stop(); PrevMediaItem(); break;
                 case Key.P: TogglePause(); break;
-                case Key.Delete: imageTimer.Stop(); if (_mediaPlayer != null && _isPlaying) _mediaPlayer.SetPause(true); PromptDeleteCurrentMedia(); break;
                 case Key.I: Overlay.Visibility = Overlay.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; break;
                 case Key.H: case Key.OemQuestion:
                     if (ErrorText.Visibility == Visibility.Visible && ErrorText.Text.StartsWith("Controls:")) {
                         HideError();
                     } else {
                         ShowError("Controls:\n" +
-                                  "Esc or double-click - Exit screensaver. Mouse movement is ignored.\n" +
+                                  "Esc, standard keys, or double-click - Exit screensaver.\n" +
                                   "Left arrow, Backspace, or left-click - Previous media\n" +
                                   "Right arrow, Tab, or right-click - Next media\n" +
                                   "Up/Down arrows or mouse wheel - Adjust volume\n" +
                                   "0 or Mute key - Mute volume\n" +
                                   "F - Show current file in File Explorer\n" +
                                   "P - Pause slideshow\n" +
-                                  "Del - Delete current file\n" +
                                   "I - Toggle info overlay\n" +
                                   "R - Rotate image 90 degrees\n" +
-                                  "O - Open current file in default application\n" +
                                   "H or ? - Show help");
                         infoShowingTimer.Stop();
                     }
                     break;
-                case Key.R: if (currentItem >= 0 && currentItem < mediaFiles.Count && IsImage(mediaFiles[currentItem])) { imageRotationAngle += 90; imageTimer.Stop(); LoadImage(mediaFiles[currentItem]); } break;
-                case Key.O: if (currentItem >= 0 && currentItem < mediaFiles.Count) { Process.Start(mediaFiles[currentItem]); EndScreensaver(); } break;
-                case Key.F: if (currentItem >= 0 && currentItem < mediaFiles.Count) { Process.Start("explorer.exe", "/select,\"" + mediaFiles[currentItem] + "\""); EndScreensaver(); } break;
+                case Key.R:
+                    string rFile = null;
+                    lock (_mediaFilesLock) {
+                        if (currentItem >= 0 && currentItem < mediaFiles.Count) {
+                            string ext = Path.GetExtension(mediaFiles[currentItem]);
+                            if (string.Equals(ext, ".jpg", StringComparison.OrdinalIgnoreCase) || 
+                                string.Equals(ext, ".jpeg", StringComparison.OrdinalIgnoreCase)) {
+                                rFile = mediaFiles[currentItem];
+                            }
+                        }
+                    }
+                    if (rFile != null) {
+                        imageRotationAngle += 90;
+                        imageTimer.Stop();
+                        LoadImage(rFile);
+                    }
+                    break;
+                case Key.F:
+                    string fFile = null;
+                    lock (_mediaFilesLock) {
+                        if (currentItem >= 0 && currentItem < mediaFiles.Count) {
+                            fFile = mediaFiles[currentItem];
+                        }
+                    }
+                    if (fFile != null) {
+                        Process.Start("explorer.exe", "/select,\"" + fFile + "\"");
+                        EndScreensaver();
+                    }
+                    break;
                 case Key.Escape: EndScreensaver(); break;
-                default: break;
+                default: EndScreensaver(); break;
             }
             e.Handled = true;
         }
@@ -146,24 +187,6 @@ namespace VideoScreensaver {
             }
         }
 
-        private void PromptDeleteCurrentMedia() {
-            if (currentItem < 0 || currentItem >= mediaFiles.Count) return;
-            var dial = new PromptDialog("Delete file?", "Type yes to delete " + Path.GetFileName(mediaFiles[currentItem]), "yes,ok");
-            if (dial.ShowDialog() == true) {
-                string fileToDelete = mediaFiles[currentItem];
-                if (algorithm == PreferenceManager.ALGORITHM_RANDOM && lastMedia != null) {
-                    if (lastMedia.IndexOf(fileToDelete) >= currentLastMediaItem) currentLastMediaItem--;
-                    lastMedia.Remove(fileToDelete);
-                }
-                mediaFiles.RemoveAt(currentItem);
-                PrevMediaItem();
-                try { File.Delete(fileToDelete); } catch { }
-                try { File.AppendAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PhotoVideoScreensaver_deletedFiles.log"), DateTime.Now + ": " + fileToDelete + Environment.NewLine); } catch { }
-            } else {
-                if (FullScreenImage.Visibility == Visibility.Visible) imageTimer.Start();
-                else if (_mediaPlayer != null) _mediaPlayer.SetPause(false);
-            }
-        }
 
         private const int WH_MOUSE_LL = 14;
         private const int WM_MOUSEWHEEL = 0x020A;
@@ -181,6 +204,71 @@ namespace VideoScreensaver {
         [System.Runtime.InteropServices.DllImport("kernel32.dll")]
         private static extern IntPtr GetModuleHandle(string lpModuleName);
 
+        // --- Win32 helpers for hiding VLC native windows (Win11 file-path flash fix) ---
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool EnumThreadWindows(uint dwThreadId, EnumWindowsProc lpEnumFunc, IntPtr lParam);
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        private static extern bool SetWindowText(IntPtr hWnd, string lpString);
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int GetWindowLongW(IntPtr hWnd, int nIndex);
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int SetWindowLongW(IntPtr hWnd, int nIndex, int dwNewLong);
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        private static extern uint GetCurrentThreadId();
+
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+        private const int WS_EX_NOACTIVATE = 0x08000000;
+        private const int SW_HIDE = 0;
+
+        /// <summary>
+        /// Finds all native HWNDs on the current thread that are NOT our main WPF window
+        /// and sanitizes them: clears title text and applies WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+        /// so they never flash on screen as a File Explorer-like window (Win11 DWM compositor issue).
+        /// </summary>
+        private void SanitizeVlcNativeWindows() {
+            try {
+                IntPtr mainHwnd = new WindowInteropHelper(this).Handle;
+                uint threadId = GetCurrentThreadId();
+                var foreignWindows = new List<IntPtr>();
+                EnumThreadWindows(threadId, (hWnd, _) => {
+                    if (hWnd != mainHwnd) foreignWindows.Add(hWnd);
+                    return true;
+                }, IntPtr.Zero);
+                foreach (var hWnd in foreignWindows) {
+                    // Clear the window title so the file path is never visible
+                    SetWindowText(hWnd, "");
+                    // Apply WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE so it doesn't flash in taskbar/alt-tab
+                    int exStyle = GetWindowLongW(hWnd, GWL_EXSTYLE);
+                    SetWindowLongW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+                }
+            } catch { }
+        }
+
+        /// <summary>
+        /// Hides all native HWNDs on the current thread that are NOT our main WPF window.
+        /// Called during shutdown to prevent the VLC native window from flashing on exit.
+        /// </summary>
+        private void HideAllVlcNativeWindows() {
+            try {
+                IntPtr mainHwnd = new WindowInteropHelper(this).Handle;
+                uint threadId = GetCurrentThreadId();
+                EnumThreadWindows(threadId, (hWnd, _) => {
+                    if (hWnd != mainHwnd) {
+                        ShowWindow(hWnd, SW_HIDE);
+                    }
+                    return true;
+                }, IntPtr.Zero);
+            } catch { }
+        }
+
         private void InstallMouseHook() {
             _instance = this;
             _mouseProc = MouseHookCallback;
@@ -193,6 +281,8 @@ namespace VideoScreensaver {
         private const int WM_LBUTTONDOWN = 0x0201;
         private const int WM_RBUTTONDOWN = 0x0204;
         private const int WM_MOUSEHWHEEL = 0x020E;
+        private const int WM_MOUSEMOVE = 0x0200;
+        private static System.Drawing.Point _initialMousePos = new System.Drawing.Point(-1, -1);
         private static int _pendingAction = 0; // 0=none, 1=left click pending, 2=right click, 3=exit
         private static DateTime _lastLeftClick = DateTime.MinValue;
         private DispatcherTimer _clickTimer;
@@ -203,7 +293,11 @@ namespace VideoScreensaver {
             _clickTimer.Tick += (s, a) => {
                 _clickTimer.Stop();
                 if (_pendingAction == 1) {
-                    if (currentItem > 0 || (algorithm == PreferenceManager.ALGORITHM_RANDOM && lastMedia != null && currentLastMediaItem > 0)) {
+                    bool shouldGoPrev = false;
+                    lock (_mediaFilesLock) {
+                        shouldGoPrev = currentItem > 0 || (algorithm == PreferenceManager.ALGORITHM_RANDOM && lastMedia != null && currentLastMediaItem > 0);
+                    }
+                    if (shouldGoPrev) {
                         imageTimer.Stop(); PrevMediaItem();
                     }
                 }
@@ -252,8 +346,52 @@ namespace VideoScreensaver {
             return CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
         }
 
-        private void EndScreensaver() {
-            if (!preview) { if (_mouseHookId != IntPtr.Zero) UnhookWindowsHookEx(_mouseHookId); ShowCursor(true); cancellationSource.Cancel(); StopVlc(); if (Application.Current != null) Application.Current.Shutdown(); }
+        public async void EndScreensaver() {
+            if (!preview) {
+                if (_mouseHookId != IntPtr.Zero) {
+                    UnhookWindowsHookEx(_mouseHookId);
+                    _mouseHookId = IntPtr.Zero;
+                }
+                ShowCursor(true);
+                cancellationSource.Cancel();
+
+                // Fire and forget VLC stop to avoid hanging exit
+                try {
+                    if (_mediaPlayer != null) {
+                        _mediaPlayer.EncounteredError -= OnMediaError;
+                        if (_volumePlayingHandler != null) {
+                            _mediaPlayer.Playing -= _volumePlayingHandler;
+                            _volumePlayingHandler = null;
+                        }
+                        if (_playingHandler != null) {
+                            _mediaPlayer.Playing -= _playingHandler;
+                            _playingHandler = null;
+                        }
+                        if (_mediaPlayer.IsPlaying) {
+                            ThreadPool.QueueUserWorkItem(_ => { try { _mediaPlayer.Stop(); } catch { } });
+                        }
+                    }
+                } catch { }
+
+                // Hide all VLC native HWNDs before closing WPF windows to prevent
+                // the Win11 DWM compositor from flashing the native window (which
+                // has the file path in its title bar) when WPF windows close.
+                HideAllVlcNativeWindows();
+
+                await Task.Delay(100);
+
+                Environment.Exit(0);
+            }
+        }
+
+        protected override void OnClosed(EventArgs e) {
+            base.OnClosed(e);
+            if (_mouseHookId != IntPtr.Zero) {
+                UnhookWindowsHookEx(_mouseHookId);
+                _mouseHookId = IntPtr.Zero;
+            }
+            HideAllVlcNativeWindows();
+            Environment.Exit(0);
         }
 
         private void StopVlc() {
@@ -261,21 +399,42 @@ namespace VideoScreensaver {
                 if (_mediaPlayer != null) {
                     _mediaPlayer.EncounteredError -= OnMediaError;
                     if (_volumePlayingHandler != null) { _mediaPlayer.Playing -= _volumePlayingHandler; _volumePlayingHandler = null; }
+                    if (_playingHandler != null) { _mediaPlayer.Playing -= _playingHandler; _playingHandler = null; }
                     if (_mediaPlayer.IsPlaying) ThreadPool.QueueUserWorkItem(_ => { try { _mediaPlayer.Stop(); } catch { } });
                 }
             } catch { }
         }
         private bool IsImage(string path) { return ImageExts.Contains(Path.GetExtension(path)); }
         private bool IsMedia(string fileName) {
-            if (fileName.Contains("$RECYCLE.BIN")) return false;
+            if (fileName.IndexOf("$RECYCLE.BIN", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            try {
+                var attr = File.GetAttributes(fileName);
+                if (((int)attr & 0x00441000) != 0) {
+                    return false;
+                }
+            } catch { }
             string ext = Path.GetExtension(fileName);
             return ImageExts.Contains(ext) || VideoExts.Contains(ext);
         }
 
         private async Task AddMediaFilesFromDirRecursive(string path, CancellationToken token) {
             try {
-                foreach (var f in Directory.GetFiles(path)) { if (token.IsCancellationRequested) return; if (IsMedia(f)) mediaFiles.Add(f); }
-                foreach (var d in Directory.GetDirectories(path)) { if (token.IsCancellationRequested) return; await AddMediaFilesFromDirRecursive(d, token); }
+                foreach (var f in Directory.GetFiles(path)) { 
+                    if (token.IsCancellationRequested) return; 
+                    if (IsMedia(f)) {
+                        lock (_mediaFilesLock) {
+                            mediaFiles.Add(f);
+                        }
+                    }
+                }
+                foreach (var d in Directory.GetDirectories(path)) { 
+                    if (token.IsCancellationRequested) return; 
+                    try {
+                        var attr = File.GetAttributes(d);
+                        if (((int)attr & 0x00441000) != 0) continue;
+                    } catch { }
+                    await AddMediaFilesFromDirRecursive(d, token); 
+                }
             } catch { }
         }
 
@@ -288,77 +447,159 @@ namespace VideoScreensaver {
                 LogError("LoadFiles: scanning " + vp);
                 await AddMediaFilesFromDirRecursive(vp, cancellationSource.Token);
             }
-            algorithm = tempAlg;
-            if (algorithm == PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT) {
-                if (lastMedia != null && lastMedia.Count > 0) {
-                    var historySet = new HashSet<string>(lastMedia);
-                    mediaFiles = mediaFiles.Where(f => !historySet.Contains(f)).OrderBy(_ => Guid.NewGuid()).ToList();
-                    mediaFiles.InsertRange(0, lastMedia);
-                    currentItem = currentLastMediaItem >= 0 ? currentLastMediaItem : 0;
-                } else {
-                    mediaFiles = mediaFiles.OrderBy(_ => Guid.NewGuid()).ToList();
-                }
+
+            bool empty = false;
+            lock (_mediaFilesLock) {
+                empty = mediaFiles.Count == 0;
             }
-            if (algorithm == PreferenceManager.ALGORITHM_RANDOM) { currentItem = 0; currentLastMediaItem = 0; }
-            isLoadingFiles = false;
+            if (empty) {
+                LogError("LoadFiles: no media files found in configured paths. Loading fallback images from C:\\Windows\\Web.");
+                LoadFallbackImages();
+            }
+
+            algorithm = tempAlg;
+            lock (_mediaFilesLock) {
+                if (algorithm == PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT) {
+                    if (lastMedia != null && lastMedia.Count > 0) {
+                        var historySet = new HashSet<string>(lastMedia);
+                        mediaFiles = mediaFiles.Where(f => !historySet.Contains(f)).OrderBy(_ => Guid.NewGuid()).ToList();
+                        mediaFiles.InsertRange(0, lastMedia);
+                        currentItem = currentLastMediaItem >= 0 ? currentLastMediaItem : 0;
+                    } else {
+                        mediaFiles = mediaFiles.OrderBy(_ => Guid.NewGuid()).ToList();
+                    }
+                }
+                if (algorithm == PreferenceManager.ALGORITHM_RANDOM) { currentItem = 0; currentLastMediaItem = 0; }
+                isLoadingFiles = false;
+            }
+        }
+
+        private void LoadFallbackImages() {
+            try {
+                string webDir = Path.Combine(Environment.GetEnvironmentVariable("SystemRoot") ?? "C:\\Windows", "Web");
+                if (Directory.Exists(webDir)) {
+                    string[] searchPaths = new string[] {
+                        Path.Combine(webDir, "Wallpaper"),
+                        Path.Combine(webDir, "Screen")
+                    };
+                    foreach (var path in searchPaths) {
+                        if (Directory.Exists(path)) {
+                            AddFallbackImagesFromDir(path);
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                LogError("LoadFallbackImages error: " + ex.Message);
+            }
+        }
+
+        private void AddFallbackImagesFromDir(string path) {
+            try {
+                foreach (var f in Directory.GetFiles(path)) {
+                    if (IsMedia(f)) {
+                        lock (_mediaFilesLock) {
+                            mediaFiles.Add(f);
+                        }
+                    }
+                }
+                foreach (var d in Directory.GetDirectories(path)) {
+                    try {
+                        var attr = File.GetAttributes(d);
+                        if (((int)attr & 0x00441000) != 0) continue;
+                    } catch { }
+                    AddFallbackImagesFromDir(d);
+                }
+            } catch { }
         }
 
         private void OnLoaded(object sender, RoutedEventArgs e) {
             if (!preview) { while (ShowCursor(false) >= 0) { } }
             mediaPaths = PreferenceManager.ReadVideoSettings();
-            mediaFiles = new List<string>();
+            lock (_mediaFilesLock) {
+                mediaFiles = new List<string>();
+            }
             algorithm = PreferenceManager.ReadAlgorithmSetting();
             if (algorithm == PreferenceManager.ALGORITHM_RANDOM || algorithm == PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT) lastMedia = new List<string>();
             isLoadingFiles = true;
             Focus();
             Keyboard.Focus(this);
-            Task.Factory.StartNew(() => LoadFiles());
+            var unused = Task.Run(async () => await LoadFiles());
             if (mediaPaths.Count == 0) { ShowError("Configure screensaver first."); return; }
             NextMediaItem();
         }
         private void PrevMediaItem() {
             _isPlaying = false; imageRotationAngle = 0;
-            switch (algorithm) {
-                case PreferenceManager.ALGORITHM_SEQUENTIAL:
-                case PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT:
-                    currentItem--; if (currentItem < 0) currentItem = isLoadingFiles ? 0 : Math.Max(mediaFiles.Count - 1, 0); break;
-                case PreferenceManager.ALGORITHM_RANDOM:
-                    if (lastMedia != null && lastMedia.Count >= 2 && currentLastMediaItem > 0) { currentLastMediaItem--; currentItem = mediaFiles.IndexOf(lastMedia[currentLastMediaItem]); }
-                    break;
+            lock (_mediaFilesLock) {
+                switch (algorithm) {
+                    case PreferenceManager.ALGORITHM_SEQUENTIAL:
+                    case PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT:
+                        currentItem--; if (currentItem < 0) currentItem = isLoadingFiles ? 0 : Math.Max(mediaFiles.Count - 1, 0); break;
+                    case PreferenceManager.ALGORITHM_RANDOM:
+                        if (lastMedia != null && lastMedia.Count >= 2 && currentLastMediaItem > 0) { currentLastMediaItem--; currentItem = mediaFiles.IndexOf(lastMedia[currentLastMediaItem]); }
+                        break;
+                }
             }
             ShowCurrentItem();
         }
 
         private async void NextMediaItem() {
             _isPlaying = false; imageRotationAngle = 0;
-            if (isLoadingFiles && mediaFiles.Count == 0) {
-                while (isLoadingFiles && mediaFiles.Count == 0) await Task.Delay(200);
+            while (true) {
+                bool shouldWait = false;
+                lock (_mediaFilesLock) {
+                    shouldWait = isLoadingFiles && mediaFiles.Count == 0;
+                }
+                if (shouldWait) await Task.Delay(200);
+                else break;
             }
-            if (isLoadingFiles && (currentItem + 1 >= mediaFiles.Count)) {
-                while (isLoadingFiles && currentItem + 1 >= mediaFiles.Count) await Task.Delay(200);
+            while (true) {
+                bool shouldWait = false;
+                lock (_mediaFilesLock) {
+                    shouldWait = isLoadingFiles && (currentItem + 1 >= mediaFiles.Count);
+                }
+                if (shouldWait) await Task.Delay(200);
+                else break;
             }
-            if (mediaFiles.Count == 0) { ShowError("No media files found."); return; }
-            switch (algorithm) {
-                case PreferenceManager.ALGORITHM_SEQUENTIAL:
-                case PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT:
-                    if (isLoadingFiles && currentItem <= 0) await Task.Delay(1000);
-                    currentItem++; if (currentItem >= mediaFiles.Count) currentItem = 0; break;
-                case PreferenceManager.ALGORITHM_RANDOM:
-                    if (isLoadingFiles && currentItem <= 0) await Task.Delay(1000);
-                    if (lastMedia != null && currentLastMediaItem < lastMedia.Count - 1) { currentLastMediaItem++; currentItem = mediaFiles.IndexOf(lastMedia[currentLastMediaItem]); }
-                    else {
-                        currentItem = _random.Next(mediaFiles.Count);
-                        if (lastMedia != null) { lastMedia.Add(mediaFiles[currentItem]); if (lastMedia.Count > 100) lastMedia.RemoveAt(0); currentLastMediaItem = lastMedia.Count - 1; }
-                    }
-                    break;
+            bool noFiles = false;
+            lock (_mediaFilesLock) {
+                noFiles = mediaFiles.Count == 0;
+            }
+            if (noFiles) { ShowError("No media files found."); return; }
+            
+            bool delaySequential = false;
+            lock (_mediaFilesLock) {
+                if (algorithm == PreferenceManager.ALGORITHM_SEQUENTIAL || algorithm == PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT) {
+                    delaySequential = isLoadingFiles && currentItem <= 0;
+                }
+            }
+            if (delaySequential) {
+                await Task.Delay(1000);
+            }
+
+            lock (_mediaFilesLock) {
+                switch (algorithm) {
+                    case PreferenceManager.ALGORITHM_SEQUENTIAL:
+                    case PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT:
+                        currentItem++; if (currentItem >= mediaFiles.Count) currentItem = 0; break;
+                    case PreferenceManager.ALGORITHM_RANDOM:
+                        if (lastMedia != null && currentLastMediaItem < lastMedia.Count - 1) { currentLastMediaItem++; currentItem = mediaFiles.IndexOf(lastMedia[currentLastMediaItem]); }
+                        else {
+                            currentItem = _random.Next(mediaFiles.Count);
+                            if (lastMedia != null) { lastMedia.Add(mediaFiles[currentItem]); if (lastMedia.Count > 100) lastMedia.RemoveAt(0); currentLastMediaItem = lastMedia.Count - 1; }
+                        }
+                        break;
+                }
             }
             ShowCurrentItem();
         }
 
         private void ShowCurrentItem() {
             HideError();
-            if (mediaFiles.Count == 0 || currentItem < 0 || currentItem >= mediaFiles.Count) { ShowError("No media files found."); return; }
-            string file = mediaFiles[currentItem];
+            string file = null;
+            lock (_mediaFilesLock) {
+                if (mediaFiles.Count == 0 || currentItem < 0 || currentItem >= mediaFiles.Count) { ShowError("No media files found."); return; }
+                file = mediaFiles[currentItem];
+            }
             if (IsImage(file)) LoadImage(file); else LoadMedia(file);
         }
         private void LoadImage(string filename) {
@@ -366,11 +607,11 @@ namespace VideoScreensaver {
                 ThreadPool.QueueUserWorkItem(_ => { try { _mediaPlayer.Stop(); } catch { } });
             }
             FullScreenImage.Visibility = Visibility.Visible;
-            VlcVideoView.Visibility = Visibility.Collapsed;
+            // Defer collapsing VlcVideoView until the image is successfully loaded to avoid transparent "holes"
             FullScreenImage.RenderTransform = null;
             Overlay.Text = "";
             string ext = Path.GetExtension(filename).ToLower();
-            if (ext == ".jpg") {
+            if (ext == ".jpg" || ext == ".jpeg") {
                 UInt16 orient = 1;
                 try {
                     var exif = new ExifUtils();
@@ -381,25 +622,13 @@ namespace VideoScreensaver {
                     catch { try { orient = ExifUtils.RotateImageViaTranscoding(filename, orient); } catch { } }
                 }
                 imageRotationAngle = ExifUtils.GetBitmapRotationAngleByRotationFlipType(ExifUtils.GetRotateFlipTypeByExifOrientationData(orient));
-            } else if (imageRotationAngle == 90) {
-                try {
-                    using (var fs = File.Open(filename, FileMode.Open, FileAccess.ReadWrite))
-                    using (var img = Image.FromStream(fs, false, false)) {
-                        img.RotateFlip(System.Drawing.RotateFlipType.Rotate90FlipNone);
-                        fs.Seek(0, SeekOrigin.Begin);
-                        if (ext == ".png") img.Save(fs, ImageFormat.Png);
-                        else if (ext == ".bmp") img.Save(fs, ImageFormat.Bmp);
-                        else if (ext == ".gif") img.Save(fs, ImageFormat.Gif);
-                    }
-                    imageRotationAngle = 0;
-                } catch { }
             }
             try {
                 using (var s = File.Open(filename, FileMode.Open, FileAccess.Read, FileShare.Delete | FileShare.Read)) {
                     var bmp = new BitmapImage();
                     bmp.BeginInit();
                     bmp.CacheOption = BitmapCacheOption.OnLoad;
-                    bmp.DecodePixelWidth = (int)SystemParameters.PrimaryScreenWidth;
+                    bmp.DecodePixelWidth = System.Windows.Forms.Screen.PrimaryScreen.Bounds.Width;
                     bmp.StreamSource = s;
                     bmp.EndInit();
                     bmp.Freeze();
@@ -410,19 +639,21 @@ namespace VideoScreensaver {
                         FullScreenImage.Source = bmp;
                     }
                     imageRotationAngle = 0;
+                    _consecutiveErrors = 0;
                     imageTimer.Start();
                     if (string.IsNullOrWhiteSpace(Overlay.Text)) Overlay.Text = filename + "\n" + bmp.PixelWidth + "x" + bmp.PixelHeight;
                 }
+                VlcVideoView.Visibility = Visibility.Hidden;
             } catch {
                 FullScreenImage.Source = null;
+                _consecutiveErrors++;
+                if (_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) { ShowError("Too many errors loading media. Check your media files."); return; }
                 NextMediaItem();
                 return;
             }
         }
 
         private async void LoadMedia(string filename) {
-            FullScreenImage.Source = null;
-            FullScreenImage.Visibility = Visibility.Collapsed;
             try {
                 await EnsureVlcInitialized();
             } catch (Exception ex) {
@@ -431,21 +662,40 @@ namespace VideoScreensaver {
                 return;
             }
             if (VlcVideoView.MediaPlayer == null) VlcVideoView.MediaPlayer = _mediaPlayer;
-            VlcVideoView.Visibility = Visibility.Visible;
+            // Sanitize any existing VLC native windows immediately when attaching the media player.
+            // This prevents file-path-titled native windows from flashing on Win11.
+            SanitizeVlcNativeWindows();
             _volume = _defaultVolume;
-            var media = new LibVLCSharp.Shared.Media(_libVLC, new Uri(filename));
-            media.AddOption(":start-volume=" + VlcVolume);
-            _mediaPlayer.EncounteredError += OnMediaError;
-            // Re-apply volume once VLC's audio pipeline is actually running
-            if (_volumePlayingHandler != null) _mediaPlayer.Playing -= _volumePlayingHandler;
-            _volumePlayingHandler = (s, a) => {
-                _mediaPlayer.Playing -= _volumePlayingHandler;
-                _volumePlayingHandler = null;
-                Dispatcher.BeginInvoke(new Action(() => ApplyVolume()));
-            };
-            _mediaPlayer.Playing += _volumePlayingHandler;
-            _mediaPlayer.Play(media);
+            using (var media = new LibVLCSharp.Shared.Media(_libVLC, new Uri(filename))) {
+                media.AddOption(":start-volume=" + VlcVolume);
+                _mediaPlayer.EncounteredError += OnMediaError;
+
+                if (_playingHandler != null) _mediaPlayer.Playing -= _playingHandler;
+                _playingHandler = (s, a) => {
+                    _mediaPlayer.Playing -= _playingHandler;
+                    _playingHandler = null;
+                    Dispatcher.BeginInvoke(new Action(() => {
+                        // Sanitize VLC native windows again now that playback has started,
+                        // as VLC may have created new windows with file-path titles.
+                        SanitizeVlcNativeWindows();
+                        VlcVideoView.Visibility = Visibility.Visible;
+                        FullScreenImage.Source = null;
+                        FullScreenImage.Visibility = Visibility.Collapsed;
+                    }));
+                };
+                _mediaPlayer.Playing += _playingHandler;
+
+                if (_volumePlayingHandler != null) _mediaPlayer.Playing -= _volumePlayingHandler;
+                _volumePlayingHandler = (s, a) => {
+                    _mediaPlayer.Playing -= _volumePlayingHandler;
+                    _volumePlayingHandler = null;
+                    Dispatcher.BeginInvoke(new Action(() => ApplyVolume()));
+                };
+                _mediaPlayer.Playing += _volumePlayingHandler;
+                _mediaPlayer.Play(media);
+            }
             _isPlaying = true;
+            _consecutiveErrors = 0;
             ApplyVolume();
             Overlay.Text = Path.GetFileName(filename);
         }
@@ -455,7 +705,12 @@ namespace VideoScreensaver {
 
         private void OnMediaError(object sender, EventArgs e) {
             if (_mediaPlayer != null) _mediaPlayer.EncounteredError -= OnMediaError;
-            Dispatcher.BeginInvoke(new Action(() => { StopVlc(); NextMediaItem(); }));
+            Dispatcher.BeginInvoke(new Action(() => {
+                StopVlc();
+                _consecutiveErrors++;
+                if (_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) { ShowError("Too many errors loading media. Check your media files."); return; }
+                NextMediaItem();
+            }));
         }
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -486,7 +741,7 @@ namespace VideoScreensaver {
             }
             LogError("NAS: found " + servers.Count + " server(s) to authenticate from " + mediaPaths.Count + " paths");
             foreach (var server in servers) {
-                LogError("NAS: connecting to " + server + " as " + user);
+                LogError("NAS: connecting to " + server + " as [credentials redacted]");
                 try {
                     var nr = new NETRESOURCE();
                     nr.dwType = 1;
@@ -500,7 +755,7 @@ namespace VideoScreensaver {
         }
 
         private static void LogError(string msg) {
-            try { File.AppendAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PhotoVideoScreensaver_error.log"), DateTime.Now + ": " + msg + Environment.NewLine); } catch { }
+            try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "PhotoVideoScreensaver_error.log"), DateTime.Now + ": " + msg + Environment.NewLine); } catch { }
         }
     }
 }

@@ -36,34 +36,6 @@ namespace VideoScreensaver {
                 }
             }
             catch { }
-
-            // Delete from all loaded user profiles in HKEY_USERS (HKU)
-            try
-            {
-                string[] userNames = Registry.Users.GetSubKeyNames();
-                foreach (string userName in userNames)
-                {
-                    if (userName.EndsWith("_Classes", StringComparison.OrdinalIgnoreCase)) continue;
-                    try
-                    {
-                        using (RegistryKey userKey = Registry.Users.OpenSubKey(userName, true))
-                        {
-                            if (userKey != null)
-                            {
-                                using (RegistryKey software = userKey.OpenSubKey("Software", true))
-                                {
-                                    if (software != null)
-                                    {
-                                        software.DeleteSubKeyTree(BASE_KEY, false);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-                }
-            }
-            catch { }
         }
 
         public static List<String> ReadVideoSettings() {
@@ -155,7 +127,8 @@ namespace VideoScreensaver {
             if (string.IsNullOrEmpty(encrypted)) return "";
             try {
                 byte[] bytes = System.Convert.FromBase64String(encrypted);
-                byte[] decrypted = System.Security.Cryptography.ProtectedData.Unprotect(bytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+                byte[] decrypted = System.Security.Cryptography.ProtectedData.Unprotect(
+                    bytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
                 return System.Text.Encoding.UTF8.GetString(decrypted);
             } catch { return ""; }
         }
@@ -169,14 +142,54 @@ namespace VideoScreensaver {
             } catch { WriteStringValue(NAS_PASSWORD_PREFS, ""); }
         }
 
+        private static RegistryKey FindUserSettingsKey() {
+            try {
+                string[] userNames = Registry.Users.GetSubKeyNames();
+                foreach (string userName in userNames) {
+                    if (userName.StartsWith("S-1-5-21-", StringComparison.OrdinalIgnoreCase) && 
+                        !userName.EndsWith("_Classes", StringComparison.OrdinalIgnoreCase)) {
+                        RegistryKey userSoftware = Registry.Users.OpenSubKey(userName + @"\Software\" + BASE_KEY, false);
+                        if (userSoftware != null) {
+                            object media = userSoftware.GetValue(VIDEO_PREFS_FILE);
+                            if (media != null && !string.IsNullOrEmpty(media.ToString())) {
+                                return userSoftware;
+                            }
+                            userSoftware.Close();
+                        }
+                    }
+                }
+            } catch { }
+            return null;
+        }
+
         private static Tuple<RegistryKey, RegistryKey> OpenRegistryKey(bool forceCreate = false) {
-            RegistryKey software = Registry.CurrentUser.CreateSubKey("Software");
-            if (forceCreate)
-            {
-                return new Tuple<RegistryKey, RegistryKey>(software.CreateSubKey(BASE_KEY), software);
-            } else
-            {
-                return new Tuple<RegistryKey, RegistryKey>(software.OpenSubKey(BASE_KEY, true), software);
+            if (!forceCreate) {
+                try {
+                    RegistryKey software = Registry.CurrentUser.OpenSubKey("Software");
+                    if (software != null) {
+                        RegistryKey appKey = software.OpenSubKey(BASE_KEY, false);
+                        if (appKey != null) {
+                            object media = appKey.GetValue(VIDEO_PREFS_FILE);
+                            if (media != null && !string.IsNullOrEmpty(media.ToString())) {
+                                return new Tuple<RegistryKey, RegistryKey>(appKey, software);
+                            }
+                            appKey.Close();
+                        }
+                        software.Close();
+                    }
+                } catch { }
+
+                RegistryKey userKey = FindUserSettingsKey();
+                if (userKey != null) {
+                    return new Tuple<RegistryKey, RegistryKey>(userKey, null);
+                }
+            }
+
+            RegistryKey sw = Registry.CurrentUser.CreateSubKey("Software");
+            if (forceCreate) {
+                return new Tuple<RegistryKey, RegistryKey>(sw.CreateSubKey(BASE_KEY), sw);
+            } else {
+                return new Tuple<RegistryKey, RegistryKey>(sw.OpenSubKey(BASE_KEY, true), sw);
             }
         }
 

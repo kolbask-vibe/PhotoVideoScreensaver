@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -14,7 +14,7 @@ namespace VideoScreensaver
         private BitmapMetadata _metaData = null;
         private int _width;
         private int _height;
-        private JpegBitmapDecoder decoder; 
+
 
 
         public ExifUtils()
@@ -24,14 +24,20 @@ namespace VideoScreensaver
 
         public bool ReadExifFromFile(String filename)
         {
+            Stream stream = null;
             try
             {
-                return ReadExifFromFile(File.Open(filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+                stream = File.Open(filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                return ReadExifFromFile(stream);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to read EXIF from " + filename + ": " + ex.Message);
                 return false;
+            }
+            finally
+            {
+                if (stream != null) stream.Dispose();
             }
         }
 
@@ -39,7 +45,7 @@ namespace VideoScreensaver
         {
             try
             {
-                decoder = new JpegBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                var decoder = new JpegBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
                 var bitmapFrame = decoder.Frames[0];
 
                 if (bitmapFrame != null)
@@ -235,8 +241,8 @@ namespace VideoScreensaver
             UInt16 orient = 1;
             orient = (UInt16)GetNextRotationOrientation(prevOrient); // get new rotation
 
-            // This only works for jpg photos
-            if (!filename.EndsWith("jpg"))
+            // This only works for jpg/jpeg photos
+            if (!filename.EndsWith("jpg", StringComparison.OrdinalIgnoreCase) && !filename.EndsWith("jpeg", StringComparison.OrdinalIgnoreCase))
             {
                 throw new ArgumentException("The file you passed in is not a JPEG:\n " + filename, "filename");
             }
@@ -270,8 +276,8 @@ namespace VideoScreensaver
             UInt16 orient = 1;
             orient = (UInt16)GetNextRotationOrientation(prevOrient); // get new rotation
 
-            // This only works for jpg photos
-            if (!filename.EndsWith("jpg"))
+            // This only works for jpg/jpeg photos
+            if (!filename.EndsWith("jpg", StringComparison.OrdinalIgnoreCase) && !filename.EndsWith("jpeg", StringComparison.OrdinalIgnoreCase))
             {
 				throw new ArgumentException("The file you passed in is not a JPEG:\n " + filename, "filename");
 			}
@@ -307,9 +313,10 @@ namespace VideoScreensaver
                 }
             }
 
-            // Delete the original and replace it with the temp output file
-            File.Delete(filename);
-            File.Move(outputTempFile, filename);
+            // Atomically replace the original with the temp output file
+            string backupFile = filename + ".bak";
+            File.Replace(outputTempFile, filename, backupFile);
+            try { File.Delete(backupFile); } catch { }
 
             return orient;
         }

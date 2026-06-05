@@ -1,12 +1,12 @@
 [Setup]
 AppId={{B7E4F2A1-3C5D-4A8B-9F1E-6D2C8A7B5E3F}
 AppName=PhotoVideoScreensaver
-AppVersion=2.5.8
+AppVersion=2.6.2
 AppPublisher=PhotoVideoScreensaver
 DefaultDirName={autopf}\PhotoVideoScreensaver
 DefaultGroupName=PhotoVideoScreensaver
 OutputDir=C:\Temp\pvss
-OutputBaseFilename=PhotoVideoScreensaver_2.5.8_setup
+OutputBaseFilename=PhotoVideoScreensaver_2.6.2_setup
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=admin
@@ -33,8 +33,9 @@ Name: "{group}\Configure PhotoVideoScreensaver"; Filename: "{app}\PhotoVideoScre
 Name: "{group}\Uninstall PhotoVideoScreensaver"; Filename: "{uninstallexe}"
 
 [Registry]
-Root: HKU; Subkey: ".DEFAULT\Control Panel\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{app}\PhotoVideoScreensaver.scr"; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Control Panel\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{app}\PhotoVideoScreensaver.scr"; Flags: uninsdeletevalue
+Root: HKU; Subkey: ".DEFAULT\Control Panel\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{sys}\PhotoVideoScreensaver.scr"; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Control Panel\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{sys}\PhotoVideoScreensaver.scr"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\VideoScreensaver"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\PhotoVideoScreensaver.exe"; Parameters: "/c"; Description: "Configure screensaver now"; Flags: postinstall nowait skipifsilent
@@ -48,6 +49,7 @@ Type: filesandordirs; Name: "{app}"
 
 [UninstallRegistry]
 Root: HKCU; Subkey: "Software\VideoScreensaver"; Flags: deletekey
+Root: HKLM; Subkey: "Software\VideoScreensaver"; Flags: deletekey
 
 [Code]
 const WS_EX_TOPMOST = $00000008;
@@ -73,6 +75,15 @@ begin
   begin
     ScrPath := ExpandConstant('{app}\PhotoVideoScreensaver.scr');
     CopyFile(ExpandConstant('{app}\PhotoVideoScreensaver.exe'), ScrPath, False);
+    // Copy .scr and its .NET config to System32 so Windows lists it in the screensaver picker
+    CopyFile(ScrPath, ExpandConstant('{sys}\PhotoVideoScreensaver.scr'), False);
+    CopyFile(ExpandConstant('{app}\PhotoVideoScreensaver.exe.config'), ExpandConstant('{sys}\PhotoVideoScreensaver.scr.config'), False);
+    // On 64-bit Windows, copy to SysWOW64 too since screensaver is 32-bit (Prefer32Bit=true) and runs under WOW64 filesystem redirection
+    if IsWin64 then
+    begin
+      CopyFile(ScrPath, ExpandConstant('{syswow64}\PhotoVideoScreensaver.scr'), False);
+      CopyFile(ExpandConstant('{app}\PhotoVideoScreensaver.exe.config'), ExpandConstant('{syswow64}\PhotoVideoScreensaver.scr.config'), False);
+    end;
   end;
 end;
 
@@ -83,6 +94,18 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
+    // Delete .scr and config from System32
+    DeleteFile(ExpandConstant('{sys}\PhotoVideoScreensaver.scr'));
+    DeleteFile(ExpandConstant('{sys}\PhotoVideoScreensaver.scr.config'));
+    // Delete .scr and config from SysWOW64 if present
+    if IsWin64 then
+    begin
+      DeleteFile(ExpandConstant('{syswow64}\PhotoVideoScreensaver.scr'));
+      DeleteFile(ExpandConstant('{syswow64}\PhotoVideoScreensaver.scr.config'));
+    end;
+    // Delete HKLM install directory key
+    RegDeleteKeyIncludingSubkeys(HKEY_LOCAL_MACHINE, 'Software\VideoScreensaver');
+
     // 1. Delete registry settings from Current User (HKCU)
     RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\VideoScreensaver');
 
@@ -98,7 +121,8 @@ begin
       end;
     end;
 
-    // 3. Delete error log from Documents folder
+    // 3. Delete error log from Documents and Temp folders
     DeleteFile(ExpandConstant('{userdocs}\PhotoVideoScreensaver_error.log'));
+    DeleteFile(GetTempDir + 'PhotoVideoScreensaver_error.log');
   end;
 end;
