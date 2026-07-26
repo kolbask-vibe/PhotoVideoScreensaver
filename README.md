@@ -4,7 +4,7 @@ A Windows screensaver that displays photos and videos from local or network fold
 
 ## Download
 
-Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.6.2_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
+Download the latest installer from [Releases](../../releases). Run `PhotoVideoScreensaver_2.7.1_setup.exe` — it will install the screensaver, register it with Windows, and optionally open the configuration dialog. Requires admin rights. Upgrades over previous versions automatically.
 
 ## Features
 
@@ -88,6 +88,24 @@ iscc installer.iss
 - Error log: `Documents\PhotoVideoScreensaver_error.log`
 
 ## Changelog
+
+### v2.7.1
+- **Video Buffering & Performance Enhancements**:
+  - Increased file, network, and SMB caching buffers to 3000ms (3 seconds) in LibVLC to eliminate stuttering and buffering pauses over Wi-Fi and NAS network shares.
+  - Enabled hardware video acceleration (`--avcodec-hw=any`) for video decoding.
+  - Enabled frame-skipping flags (`--drop-late-frames`, `--skip-frames`) to prevent video freezes during temporary network jitter.
+
+### v2.7.0
+- **Sequence Repeat & Looping Fix**:
+  - Fixed a critical bug where `ALGORITHM_RANDOM` and `ALGORITHM_RANDOM_NO_REPEAT` caused the screensaver to replay the same sequence of images twice after background folder indexing completed.
+  - Implemented automatic $O(N)$ Fisher-Yates cycle re-shuffling in `Random (no repeat)` mode when reaching the end of the media collection, ensuring media sequences never repeat in identical order across playback cycles.
+  - Eliminated index resetting upon loading completion, preserving active slideshow position and playback state seamlessly.
+- **Performance & Deduplication**:
+  - Added automatic case-insensitive file path deduplication during media discovery, preventing duplicate entries for nested or double-added directories.
+  - Replaced $O(N \log N)$ Guid-based random sorting with an $O(N)$ Fisher-Yates shuffle algorithm.
+- **Thread Safety & Stability**:
+  - Encapsulated `lastMedia` navigation history under thread-lock synchronization to eliminate cross-thread collection modification exceptions between background indexing tasks and the WPF UI thread.
+  - Added defensive screen bounds checking for High-DPI primary displays and improved consecutive image rotation (`R` key) handling.
 
 ### v2.6.2
 - **Security & Vulnerability Fixes**:

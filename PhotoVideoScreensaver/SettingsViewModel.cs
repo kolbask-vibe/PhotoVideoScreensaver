@@ -183,16 +183,16 @@ namespace VideoScreensaver
             }
         }
 
-        private int _alghoritm;
+        private int _algorithm;
         public int NextMediaAlgorithm
         {
             get
             {
-                return _alghoritm;
+                return _algorithm;
             }
             set
             {
-                _alghoritm = value;
+                _algorithm = value;
                 OnPropertyChanged("NextMediaAlgorithm");
             }
         }

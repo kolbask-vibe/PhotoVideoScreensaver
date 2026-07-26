@@ -38,6 +38,19 @@ namespace VideoScreensaver {
         private int _consecutiveErrors = 0;
         private const int MAX_CONSECUTIVE_ERRORS = 50;
 
+        /// <summary>
+        /// Performs an in-place Fisher-Yates shuffle on the given list.
+        /// MUST be called within a lock (_mediaFilesLock) or thread-safe context.
+        /// </summary>
+        private void ShuffleLocked<T>(IList<T> list) {
+            for (int i = list.Count - 1; i > 0; i--) {
+                int k = _random.Next(i + 1);
+                T tmp = list[i];
+                list[i] = list[k];
+                list[k] = tmp;
+            }
+        }
+
         private static LibVLC _libVLC;
         private MediaPlayer _mediaPlayer;
         private bool _isPlaying;
@@ -67,7 +80,14 @@ namespace VideoScreensaver {
                 if (!Directory.Exists(libvlcPath))
                     libvlcPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PhotoVideoScreensaver", "libvlc", arch);
                 Core.Initialize(libvlcPath);
-                _libVLC = new LibVLC("--no-osd", "--no-video-title-show", "--no-volume-save");
+                _libVLC = new LibVLC(
+                    "--no-osd",
+                    "--no-video-title-show",
+                    "--no-volume-save",
+                    "--avcodec-hw=any",
+                    "--drop-late-frames",
+                    "--skip-frames"
+                );
             }
         }
 
@@ -85,7 +105,11 @@ namespace VideoScreensaver {
         }
 
         private void ApplyVolume() {
-            if (_mediaPlayer != null) _mediaPlayer.Volume = VlcVolume;
+            if (_mediaPlayer != null) {
+                int vol = VlcVolume;
+                _mediaPlayer.Volume = vol;
+                _mediaPlayer.Mute = (vol <= 0);
+            }
         }
 
         public MainWindow(bool preview) {
@@ -156,7 +180,7 @@ namespace VideoScreensaver {
                         }
                     }
                     if (rFile != null) {
-                        imageRotationAngle += 90;
+                        imageRotationAngle = 90;
                         imageTimer.Stop();
                         LoadImage(rFile);
                     }
@@ -450,6 +474,15 @@ namespace VideoScreensaver {
 
             bool empty = false;
             lock (_mediaFilesLock) {
+                // Deduplicate mediaFiles while preserving order of discovery
+                var uniqueFiles = new List<string>(mediaFiles.Count);
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var f in mediaFiles) {
+                    if (seen.Add(f)) {
+                        uniqueFiles.Add(f);
+                    }
+                }
+                mediaFiles = uniqueFiles;
                 empty = mediaFiles.Count == 0;
             }
             if (empty) {
@@ -461,15 +494,23 @@ namespace VideoScreensaver {
             lock (_mediaFilesLock) {
                 if (algorithm == PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT) {
                     if (lastMedia != null && lastMedia.Count > 0) {
-                        var historySet = new HashSet<string>(lastMedia);
-                        mediaFiles = mediaFiles.Where(f => !historySet.Contains(f)).OrderBy(_ => Guid.NewGuid()).ToList();
-                        mediaFiles.InsertRange(0, lastMedia);
-                        currentItem = currentLastMediaItem >= 0 ? currentLastMediaItem : 0;
+                        var historySet = new HashSet<string>(lastMedia, StringComparer.OrdinalIgnoreCase);
+                        var unplayed = mediaFiles.Where(f => !historySet.Contains(f)).ToList();
+                        ShuffleLocked(unplayed);
+                        mediaFiles = new List<string>(lastMedia);
+                        mediaFiles.AddRange(unplayed);
+                        currentItem = currentLastMediaItem >= 0 ? currentLastMediaItem : (mediaFiles.Count > 0 ? 0 : -1);
                     } else {
-                        mediaFiles = mediaFiles.OrderBy(_ => Guid.NewGuid()).ToList();
+                        ShuffleLocked(mediaFiles);
+                        if (currentItem < 0 && mediaFiles.Count > 0) currentItem = 0;
                     }
+                } else if (algorithm == PreferenceManager.ALGORITHM_RANDOM) {
+                    // Do NOT reset currentItem or currentLastMediaItem to 0 here!
+                    // Keep active playback position and navigation history intact.
+                    if (currentItem < 0 && mediaFiles.Count > 0) currentItem = 0;
+                } else if (algorithm == PreferenceManager.ALGORITHM_SEQUENTIAL) {
+                    if (currentItem < 0 && mediaFiles.Count > 0) currentItem = 0;
                 }
-                if (algorithm == PreferenceManager.ALGORITHM_RANDOM) { currentItem = 0; currentLastMediaItem = 0; }
                 isLoadingFiles = false;
             }
         }
@@ -579,13 +620,44 @@ namespace VideoScreensaver {
             lock (_mediaFilesLock) {
                 switch (algorithm) {
                     case PreferenceManager.ALGORITHM_SEQUENTIAL:
+                        currentItem++;
+                        if (currentItem >= mediaFiles.Count) currentItem = 0;
+                        break;
                     case PreferenceManager.ALGORITHM_RANDOM_NO_REPEAT:
-                        currentItem++; if (currentItem >= mediaFiles.Count) currentItem = 0; break;
+                        currentItem++;
+                        if (currentItem >= mediaFiles.Count) {
+                            // Cycle completed! Re-shuffle mediaFiles so the sequence is never identical.
+                            string lastShownFile = (mediaFiles.Count > 0 && currentItem - 1 >= 0 && currentItem - 1 < mediaFiles.Count) 
+                                ? mediaFiles[currentItem - 1] 
+                                : null;
+                            ShuffleLocked(mediaFiles);
+                            // Avoid playing the exact same file back-to-back across cycle boundaries
+                            if (mediaFiles.Count > 1 && lastShownFile != null && string.Equals(mediaFiles[0], lastShownFile, StringComparison.OrdinalIgnoreCase)) {
+                                string tmp = mediaFiles[0];
+                                mediaFiles[0] = mediaFiles[1];
+                                mediaFiles[1] = tmp;
+                            }
+                            currentItem = 0;
+                        }
+                        break;
                     case PreferenceManager.ALGORITHM_RANDOM:
-                        if (lastMedia != null && currentLastMediaItem < lastMedia.Count - 1) { currentLastMediaItem++; currentItem = mediaFiles.IndexOf(lastMedia[currentLastMediaItem]); }
-                        else {
-                            currentItem = _random.Next(mediaFiles.Count);
-                            if (lastMedia != null) { lastMedia.Add(mediaFiles[currentItem]); if (lastMedia.Count > 100) lastMedia.RemoveAt(0); currentLastMediaItem = lastMedia.Count - 1; }
+                        if (lastMedia != null && currentLastMediaItem < lastMedia.Count - 1) {
+                            currentLastMediaItem++;
+                            currentItem = mediaFiles.IndexOf(lastMedia[currentLastMediaItem]);
+                        } else {
+                            int nextIdx = _random.Next(mediaFiles.Count);
+                            if (mediaFiles.Count > 1 && currentItem >= 0 && currentItem < mediaFiles.Count && nextIdx == currentItem) {
+                                nextIdx = (nextIdx + 1) % mediaFiles.Count;
+                            }
+                            currentItem = nextIdx;
+                            if (lastMedia != null) {
+                                lastMedia.Add(mediaFiles[currentItem]);
+                                if (lastMedia.Count > 100) {
+                                    lastMedia.RemoveAt(0);
+                                    currentLastMediaItem--;
+                                }
+                                currentLastMediaItem = lastMedia.Count - 1;
+                            }
                         }
                         break;
                 }
@@ -628,7 +700,7 @@ namespace VideoScreensaver {
                     var bmp = new BitmapImage();
                     bmp.BeginInit();
                     bmp.CacheOption = BitmapCacheOption.OnLoad;
-                    bmp.DecodePixelWidth = System.Windows.Forms.Screen.PrimaryScreen.Bounds.Width;
+                    bmp.DecodePixelWidth = System.Windows.Forms.Screen.PrimaryScreen != null ? System.Windows.Forms.Screen.PrimaryScreen.Bounds.Width : (int)SystemParameters.PrimaryScreenWidth;
                     bmp.StreamSource = s;
                     bmp.EndInit();
                     bmp.Freeze();
@@ -668,6 +740,9 @@ namespace VideoScreensaver {
             _volume = _defaultVolume;
             using (var media = new LibVLCSharp.Shared.Media(_libVLC, new Uri(filename))) {
                 media.AddOption(":start-volume=" + VlcVolume);
+                media.AddOption(":file-caching=3000");
+                media.AddOption(":network-caching=3000");
+                media.AddOption(":smb-caching=3000");
                 _mediaPlayer.EncounteredError += OnMediaError;
 
                 if (_playingHandler != null) _mediaPlayer.Playing -= _playingHandler;
@@ -689,9 +764,14 @@ namespace VideoScreensaver {
                 _volumePlayingHandler = (s, a) => {
                     _mediaPlayer.Playing -= _volumePlayingHandler;
                     _volumePlayingHandler = null;
-                    Dispatcher.BeginInvoke(new Action(() => ApplyVolume()));
+                    try {
+                        int vol = VlcVolume;
+                        _mediaPlayer.Volume = vol;
+                        _mediaPlayer.Mute = (vol <= 0);
+                    } catch { }
                 };
                 _mediaPlayer.Playing += _volumePlayingHandler;
+                ApplyVolume();
                 _mediaPlayer.Play(media);
             }
             _isPlaying = true;
